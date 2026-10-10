@@ -100,14 +100,17 @@ artifact (named `redemption-build-<n>-*.apk`).
 
 ### Publishing a release
 
-```bash
-# bump `version:` in pubspec.yaml, commit to master, then:
-git tag -a v1.1.0 -m "Redemption v1.1.0"
-git push origin v1.1.0
-```
+1. Bump `version:` in `pubspec.yaml` (e.g. `1.1.0+1`) and push to `master`.
+2. Either click **Actions → CI → Run workflow**, tick **release**, run on `master`
+   (GitHub creates the `v1.1.0` tag for you), or push a tag yourself:
 
-The tag runs the full CI (tests → APKs + Play `.aab`) and publishes a GitHub Release with
-the APKs, the bundle and `SHA256SUMS.txt`. `versionName` comes from the tag and `versionCode`
+   ```bash
+   git tag -a v1.1.0 -m "Redemption v1.1.0" && git push origin v1.1.0
+   ```
+
+Both paths run the full CI (tests → APKs + Play `.aab`) and publish a GitHub Release with
+the APKs, the bundle and `SHA256SUMS.txt`. Releasing a version whose tag already exists is
+refused, so a release is never overwritten by accident. `versionName` comes from the tag and `versionCode`
 from the CI run number, so every build upgrades the previous one.
 
 > Builds are signed with a shared **dev** key committed to the repo, so every new APK
