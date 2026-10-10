@@ -86,18 +86,31 @@ meals, WFH/office, pre-workout, workout, sleep), *Body recomposition*, *Deep wor
 
 ## Get the app
 
-### Download a build (no tools needed)
+### Download the APK
 
-Every push builds Android APKs in GitHub Actions:
+Grab the latest build from **[Releases](https://github.com/yasirfaizahmed/redemption/releases/latest)**:
 
-1. Open **Actions → CI** → the latest green run.
-2. Download the **redemption-android** artifact and unzip it.
-3. Install **`redemption-universal.apk`** on your phone (allow “install unknown apps”).
-   `redemption-arm64-v8a.apk` is a smaller build for almost all modern phones.
+1. Download **`redemption-<version>-universal.apk`** (works on every phone;
+   `…-arm64-v8a.apk` is a smaller build for almost all modern phones).
+2. Open it on your phone and allow “install unknown apps” when prompted.
+3. Future releases install straight over the old version — your data is kept.
 
-Tagging a commit `v1.0.0` publishes a GitHub Release with the APKs and a Play-ready `.aab`.
+Every push to any branch also builds APKs: **Actions → CI → latest run → `redemption-android`**
+artifact (named `redemption-build-<n>-*.apk`).
 
-> CI builds are signed with a shared **dev** key committed to the repo, so every new APK
+### Publishing a release
+
+```bash
+# bump `version:` in pubspec.yaml, commit to master, then:
+git tag -a v1.1.0 -m "Redemption v1.1.0"
+git push origin v1.1.0
+```
+
+The tag runs the full CI (tests → APKs + Play `.aab`) and publishes a GitHub Release with
+the APKs, the bundle and `SHA256SUMS.txt`. `versionName` comes from the tag and `versionCode`
+from the CI run number, so every build upgrades the previous one.
+
+> Builds are signed with a shared **dev** key committed to the repo, so every new APK
 > installs over the previous one and keeps your data. For a Play Store release, add your own
 > key as secrets (see [Signing](#signing)).
 
@@ -153,8 +166,9 @@ repositories (cascade, upsert, slotting, archive, backup restore) and full app f
 (onboarding, one-tap logging, creating a tracker, 200 % text scale on every tab).
 
 CI (`.github/workflows/ci.yml`) runs codegen drift checks, formatting, analysis and tests,
-then builds APKs (and an AAB + GitHub Release on tags). An optional macOS job verifies the
-iOS build (`workflow_dispatch` with *ios = true*, or on tags).
+then builds APKs (and an AAB + GitHub Release on `v*` tags). The workflow token is read-only
+except for the release step. A macOS job verifies the iOS build on tags (or manually via
+`workflow_dispatch` with *ios = true*).
 
 ## Signing
 
