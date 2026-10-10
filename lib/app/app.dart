@@ -1,0 +1,153 @@
+import 'dart:async';
+
+import 'package:dynamic_color/dynamic_color.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logging/logging.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../domain/app_settings.dart';
+import '../domain/models.dart';
+import '../state/providers.dart';
+import 'router.dart';
+import 'theme/app_theme.dart';
+
+final _log = Logger('App');
+
+class RedemptionApp extends ConsumerStatefulWidget {
+  const RedemptionApp({super.key});
+
+  @override
+  ConsumerState<RedemptionApp> createState() => _RedemptionAppState();
+}
+
+class _RedemptionAppState extends ConsumerState<RedemptionApp> {
+  late final AppLifecycleListener _lifecycle;
+  StreamSubscription<String>? _taps;
+  Timer? _syncDebounce;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(
+      onResume: () => ref.read(clockProvider.notifier).refresh(),
+    );
+    final notifications = ref.read(notificationServiceProvider);
+    _taps = notifications.taps.listen(_handlePayload);
+    final launch = notifications.launchPayload;
+    if (launch != null) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _handlePayload(launch),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    _syncDebounce?.cancel();
+    unawaited(_taps?.cancel());
+    super.dispose();
+  }
+
+  void _handlePayload(String payload) {
+    _log.info('Notification tapped: $payload');
+    final router = ref.read(routerProvider);
+    if (payload.startsWith('tracker:')) {
+      final id = int.tryParse(payload.substring('tracker:'.length));
+      if (id != null) router.go(Routes.logTracker(id));
+    } else {
+      router.go(Routes.today);
+    }
+  }
+
+  /// Reschedules reminders whenever trackers or reminder settings change.
+  void _scheduleReminderSync() {
+    _syncDebounce?.cancel();
+    _syncDebounce = Timer(const Duration(milliseconds: 800), () {
+      final trackers = ref.read(activeTrackersProvider);
+      final settings = ref.read(settingsValueProvider);
+      unawaited(
+        ref
+            .read(notificationServiceProvider)
+            .sync(trackers: trackers, settings: settings),
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen<List<Tracker>>(
+      activeTrackersProvider,
+      (_, _) => _scheduleReminderSync(),
+    );
+    ref.listen<(bool, int, bool)>(
+      settingsValueProvider.select(
+        (s) => (s.checkInEnabled, s.checkInMinutes, s.use24h),
+      ),
+      (_, _) => _scheduleReminderSync(),
+    );
+
+    final settingsAsync = ref.watch(settingsProvider);
+    final journeyAsync = ref.watch(activeJourneyProvider);
+    final settings = settingsAsync.value ?? const AppSettings();
+    final ready = settingsAsync.hasValue && journeyAsync.hasValue;
+
+    return DynamicColorBuilder(
+      builder: (lightDynamic, darkDynamic) {
+        final useDynamic = settings.useDynamicColor;
+        final seed = Color(settings.seedColor);
+        final light = AppTheme.light(useDynamic ? lightDynamic : null, seed);
+        final dark = AppTheme.dark(
+          useDynamic ? darkDynamic : null,
+          seed,
+          pureBlack: settings.pureBlack,
+        );
+        if (!ready) {
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: light,
+            darkTheme: dark,
+            themeMode: settings.themeMode,
+            home: const _Splash(),
+          );
+        }
+        return MaterialApp.router(
+          title: 'Redemption',
+          debugShowCheckedModeBanner: false,
+          theme: light,
+          darkTheme: dark,
+          themeMode: settings.themeMode,
+          routerConfig: ref.watch(routerProvider),
+        );
+      },
+    );
+  }
+}
+
+class _Splash extends StatelessWidget {
+  const _Splash();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.auto_awesome_rounded,
+              size: 48,
+              color: theme.colorScheme.primary,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'REDEMPTION',
+              style: theme.textTheme.titleLarge?.copyWith(letterSpacing: 6),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
