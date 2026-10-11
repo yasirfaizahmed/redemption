@@ -7,6 +7,8 @@ import 'package:material_ui/material_ui.dart';
 
 import '../domain/app_settings.dart';
 import '../domain/models.dart';
+import '../features/settings/app_update_ui.dart';
+import '../state/app_update.dart';
 import '../state/drive_sync.dart';
 import '../state/providers.dart';
 import 'router.dart';
@@ -24,6 +26,7 @@ class RedemptionApp extends ConsumerStatefulWidget {
 class _RedemptionAppState extends ConsumerState<RedemptionApp> {
   late final AppLifecycleListener _lifecycle;
   late final DriveAutoBackup _autoBackup;
+  late final AutoUpdateChecker _updates;
   StreamSubscription<String>? _taps;
   Timer? _syncDebounce;
 
@@ -31,8 +34,12 @@ class _RedemptionAppState extends ConsumerState<RedemptionApp> {
   void initState() {
     super.initState();
     _autoBackup = DriveAutoBackup(ref)..start();
+    _updates = AutoUpdateChecker(ref)..start();
     _lifecycle = AppLifecycleListener(
-      onResume: () => ref.read(clockProvider.notifier).refresh(),
+      onResume: () {
+        ref.read(clockProvider.notifier).refresh();
+        _updates.onResume();
+      },
       // Leaving the app: upload pending changes now rather than later.
       onHide: _autoBackup.flush,
     );
@@ -50,6 +57,7 @@ class _RedemptionAppState extends ConsumerState<RedemptionApp> {
   void dispose() {
     _lifecycle.dispose();
     _autoBackup.dispose();
+    _updates.dispose();
     _syncDebounce?.cancel();
     unawaited(_taps?.cancel());
     super.dispose();
@@ -61,6 +69,12 @@ class _RedemptionAppState extends ConsumerState<RedemptionApp> {
     if (payload.startsWith('tracker:')) {
       final id = int.tryParse(payload.substring('tracker:'.length));
       if (id != null) router.go(Routes.logTracker(id));
+    } else if (payload == 'update') {
+      router.go(Routes.home);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final context = router.routerDelegate.navigatorKey.currentContext;
+        if (context != null && context.mounted) showUpdateSheet(context);
+      });
     } else {
       router.go(Routes.today);
     }

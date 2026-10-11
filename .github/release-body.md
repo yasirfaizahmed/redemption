@@ -6,7 +6,9 @@
 2. Open it on your phone and allow **Install unknown apps** for your browser or file manager when asked.
 3. Open **Redemption**, pick a template (or start from scratch), set your intention — and begin.
 
-**Updating:** install a newer APK straight over the old one. Your journeys, logs and photos are kept.
+**Updating:** from v1.1.0 the app updates itself — *Settings → App updates* (or just wait for the
+“Update ready” card). Older versions: install a newer APK straight over the old one. Your journeys,
+logs and photos are kept.
 Before any reinstall, turn on *Settings → Google Drive backup* (or use *Export full backup*) to be safe.
 
 **Verify the download (optional):** compare with `SHA256SUMS.txt`, e.g. `sha256sum -c SHA256SUMS.txt`.

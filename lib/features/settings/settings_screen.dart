@@ -14,6 +14,7 @@ import '../../core/widgets/common.dart';
 import '../../domain/app_settings.dart';
 import '../../domain/formatting.dart';
 import '../../state/providers.dart';
+import 'app_update_ui.dart';
 import 'drive_backup.dart';
 
 final _log = Logger('Settings');
@@ -344,6 +345,8 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
           ),
+
+          const AppUpdateSection(),
 
           const SectionHeader('About'),
           ListTile(

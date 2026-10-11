@@ -6,6 +6,7 @@ import '../../app/router.dart';
 import '../../core/widgets/common.dart';
 import '../../domain/dashboard.dart';
 import '../../state/providers.dart';
+import '../settings/app_update_ui.dart';
 import 'widgets/dashboard_cards.dart';
 
 class DashboardScreen extends ConsumerWidget {
@@ -80,6 +81,7 @@ class DashboardScreen extends ConsumerWidget {
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
               children: [
+                const UpdateBanner(),
                 for (final row in layoutRows(items))
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),

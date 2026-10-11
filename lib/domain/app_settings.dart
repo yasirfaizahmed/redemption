@@ -31,6 +31,11 @@ class AppSettings {
     this.driveEmail = '',
     this.driveAutoBackup = true,
     this.driveLastBackupAt,
+    this.updateAutoCheck = true,
+    this.updateAutoDownload = true,
+    this.updateLastCheckAt,
+    this.updateSkippedVersion = '',
+    this.updateNotifiedVersion = '',
   });
 
   factory AppSettings.fromMap(Map<String, String> m) {
@@ -63,6 +68,12 @@ class AppSettings {
       driveEmail: m['driveEmail'] ?? d.driveEmail,
       driveAutoBackup: b('driveAutoBackup') ?? d.driveAutoBackup,
       driveLastBackupAt: DateTime.tryParse(m['driveLastBackupAt'] ?? ''),
+      updateAutoCheck: b('updateAutoCheck') ?? d.updateAutoCheck,
+      updateAutoDownload: b('updateAutoDownload') ?? d.updateAutoDownload,
+      updateLastCheckAt: DateTime.tryParse(m['updateLastCheckAt'] ?? ''),
+      updateSkippedVersion: m['updateSkippedVersion'] ?? d.updateSkippedVersion,
+      updateNotifiedVersion:
+          m['updateNotifiedVersion'] ?? d.updateNotifiedVersion,
     );
   }
 
@@ -73,6 +84,15 @@ class AppSettings {
     'driveEmail',
     'driveAutoBackup',
     'driveLastBackupAt',
+  };
+
+  /// Keys describing this installation's update state (kept on restore).
+  static const updateKeys = {
+    'updateAutoCheck',
+    'updateAutoDownload',
+    'updateLastCheckAt',
+    'updateSkippedVersion',
+    'updateNotifiedVersion',
   };
 
   static const defaultSeed = 0xFF0E9F6E;
@@ -106,6 +126,17 @@ class AppSettings {
   final bool driveAutoBackup;
   final DateTime? driveLastBackupAt;
 
+  /// In-app updates from GitHub releases (Android, sideloaded builds).
+  final bool updateAutoCheck;
+  final bool updateAutoDownload;
+  final DateTime? updateLastCheckAt;
+
+  /// A version the user chose to skip (no banner/notification for it).
+  final String updateSkippedVersion;
+
+  /// The last version a notification was shown for (one per version).
+  final String updateNotifiedVersion;
+
   Map<String, String> toMap() => {
     'themeMode': themeMode.name,
     'seedColor': '$seedColor',
@@ -125,6 +156,11 @@ class AppSettings {
     'driveEmail': driveEmail,
     'driveAutoBackup': '$driveAutoBackup',
     'driveLastBackupAt': driveLastBackupAt?.toUtc().toIso8601String() ?? '',
+    'updateAutoCheck': '$updateAutoCheck',
+    'updateAutoDownload': '$updateAutoDownload',
+    'updateLastCheckAt': updateLastCheckAt?.toUtc().toIso8601String() ?? '',
+    'updateSkippedVersion': updateSkippedVersion,
+    'updateNotifiedVersion': updateNotifiedVersion,
   };
 
   AppSettings copyWith({
@@ -146,6 +182,11 @@ class AppSettings {
     String? driveEmail,
     bool? driveAutoBackup,
     DateTime? Function()? driveLastBackupAt,
+    bool? updateAutoCheck,
+    bool? updateAutoDownload,
+    DateTime? Function()? updateLastCheckAt,
+    String? updateSkippedVersion,
+    String? updateNotifiedVersion,
   }) => AppSettings(
     themeMode: themeMode ?? this.themeMode,
     seedColor: seedColor ?? this.seedColor,
@@ -167,5 +208,12 @@ class AppSettings {
     driveLastBackupAt: driveLastBackupAt != null
         ? driveLastBackupAt()
         : this.driveLastBackupAt,
+    updateAutoCheck: updateAutoCheck ?? this.updateAutoCheck,
+    updateAutoDownload: updateAutoDownload ?? this.updateAutoDownload,
+    updateLastCheckAt: updateLastCheckAt != null
+        ? updateLastCheckAt()
+        : this.updateLastCheckAt,
+    updateSkippedVersion: updateSkippedVersion ?? this.updateSkippedVersion,
+    updateNotifiedVersion: updateNotifiedVersion ?? this.updateNotifiedVersion,
   );
 }

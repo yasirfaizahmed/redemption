@@ -129,7 +129,8 @@ class NotificationService {
   }) async {
     if (!_ready) return;
     try {
-      await _plugin.cancelAll();
+      // Only scheduled reminders: an "update ready" notice on screen stays.
+      await _plugin.cancelAllPendingNotifications();
       final mode = await _scheduleMode();
       var count = 0;
       for (final t in trackers) {
@@ -194,6 +195,27 @@ class NotificationService {
     );
   }
 
+  static const updateId = 3;
+
+  /// "A new version is ready" — tapping it opens the update sheet.
+  Future<void> showUpdate({
+    required String version,
+    required bool ready,
+  }) async {
+    if (!_ready) return;
+    await _plugin.show(
+      id: updateId,
+      title: ready
+          ? 'Redemption $version is ready to install'
+          : 'Redemption $version is available',
+      body: ready
+          ? 'Tap to install the update.'
+          : 'Tap to see what’s new and update.',
+      notificationDetails: _details(_updateChannel),
+      payload: 'update',
+    );
+  }
+
   Future<AndroidScheduleMode> _scheduleMode() async {
     if (!Platform.isAndroid) return AndroidScheduleMode.exactAllowWhileIdle;
     final canExact =
@@ -212,6 +234,11 @@ class NotificationService {
     id: 'tracker_reminders',
     name: 'Tracker reminders',
     description: 'Reminders you set on individual trackers',
+  );
+  static const _updateChannel = (
+    id: 'app_updates',
+    name: 'App updates',
+    description: 'When a new version of Redemption is available',
   );
   static const _checkInChannel = (
     id: 'daily_check_in',

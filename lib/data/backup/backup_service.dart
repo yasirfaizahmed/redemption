@@ -35,7 +35,11 @@ class BackupService {
   static const format = 'redemption-backup';
 
   /// Settings that belong to the device, never overwritten by a restore.
-  static final deviceSettingKeys = {...AppSettings.driveKeys, 'installId'};
+  static final deviceSettingKeys = {
+    ...AppSettings.driveKeys,
+    ...AppSettings.updateKeys,
+    'installId',
+  };
   static const formatVersion = 1;
 
   Future<Map<String, dynamic>> buildSnapshot() async {

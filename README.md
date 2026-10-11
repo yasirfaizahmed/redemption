@@ -77,6 +77,9 @@ rewiring phase, intention & daily quote.
   can restore its journey from the welcome screen. One-time Google Cloud setup:
   [docs/google-drive-setup.md](docs/google-drive-setup.md).
 - Full ZIP backup (data + photos) and restore; CSV export for Sheets/pandas.
+- **In-app updates** from this repo's GitHub releases: checks on start-up/resume, downloads the
+  APK for your phone's CPU in the background, verifies it against the release's `SHA256SUMS.txt`
+  and hands it to Android's installer (you confirm with one tap). *Settings → App updates*.
 - Android Auto Backup covers the database.
 
 **Built for everyone**
@@ -104,6 +107,11 @@ Every push to any branch also builds APKs: **Actions → CI → latest run → `
 artifact (named `redemption-build-<n>-*.apk`).
 
 ### Publishing a release
+
+Add a `## <version>` section to [`CHANGELOG.md`](CHANGELOG.md) and bump `version:` in
+`pubspec.yaml` first: CI copies that section into the release as **What's new**, and the
+in-app updater shows it before updating. Installed apps (v1.1.0+) find the release on their
+next start.
 
 1. Bump `version:` in `pubspec.yaml` (e.g. `1.1.0+1`) and push to `master`.
 2. Either click **Actions → CI → Run workflow**, tick **release**, run on `master`
@@ -144,7 +152,8 @@ lib/
 ├── data/                  Drift (SQLite) schema + type converters, repositories,
 │                          attachment store, ZIP/CSV backup
 ├── services/              local notifications (timezone-aware, exact/inexact fallback),
-│                          Google Drive backup (REST client, authorization, snapshots)
+│                          Google Drive backup (REST client, authorization, snapshots),
+│                          in-app updates (GitHub releases, verified download, installer)
 ├── state/                 Riverpod providers (reactive streams → derived analytics), actions
 └── features/              onboarding · dashboard (+ editor) · today · entry sheet & inputs ·
                            plan & tracker editor · insights · journey · settings · diagnostics
@@ -165,7 +174,7 @@ lib/
 ```bash
 flutter analyze                         # strict lints, zero issues
 dart format --set-exit-if-changed lib test
-flutter test                            # 70 unit, repository & widget tests
+flutter test                            # 85+ unit, repository & widget tests
 SCREENSHOTS=1 flutter test test/screenshots --update-goldens   # regenerate docs/screenshots
 ```
 
