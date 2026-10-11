@@ -7,7 +7,7 @@
 3. Open **Redemption**, pick a template (or start from scratch), set your intention — and begin.
 
 **Updating:** install a newer APK straight over the old one. Your journeys, logs and photos are kept.
-Before any reinstall, use *Settings → Export full backup* to be safe.
+Before any reinstall, turn on *Settings → Google Drive backup* (or use *Export full backup*) to be safe.
 
 **Verify the download (optional):** compare with `SHA256SUMS.txt`, e.g. `sha256sum -c SHA256SUMS.txt`.
 
@@ -19,7 +19,9 @@ Before any reinstall, use *Settings → Export full backup* to be safe.
 - A dashboard you design: journey ring (day X of 90), streaks, quick strips such as the five daily prayers,
   tracker rings, journey heat-map, trend charts, rewiring phase and your intention.
 - Insights per day and per tracker, ZIP backup/restore with photos and CSV export.
-- Private by design: everything stays on your device.
+- Optional automatic backup to a hidden folder in your own Google Drive — reinstall and pick up
+  where you left off. Needs a one-time Google Cloud setup: see `docs/google-drive-setup.md`.
+- Private by design: nothing leaves your phone unless you turn on Drive backup or export it.
 
 > Signed with the project's shared development key. The `.aab` is for Google Play once a
 > production upload key is configured (see README → Signing).

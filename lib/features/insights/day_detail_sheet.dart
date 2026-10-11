@@ -91,7 +91,12 @@ class _DayDetail extends ConsumerWidget {
             final status = scoring.status(t, entry, day, today);
             return ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-              leading: TrackerAvatar(tracker: t, size: 40, status: status),
+              leading: TrackerAvatar(
+                tracker: t,
+                size: 40,
+                status: status,
+                entry: entry,
+              ),
               title: Text(t.name),
               subtitle: Text(
                 entry == null
@@ -104,7 +109,7 @@ class _DayDetail extends ConsumerWidget {
                 overflow: TextOverflow.ellipsis,
               ),
               trailing: Icon(
-                Palette.iconForStatus(status),
+                Palette.iconFor(t, entry, status),
                 color: Palette.forStatus(status, theme.colorScheme),
               ),
               onTap: () => showEntrySheet(context, trackerId: t.id, day: day),

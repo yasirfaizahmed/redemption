@@ -108,7 +108,11 @@ class TrackerTile extends ConsumerWidget {
                         children: [
                           Row(
                             children: [
-                              TrackerAvatar(tracker: tracker, status: status),
+                              TrackerAvatar(
+                                tracker: tracker,
+                                status: status,
+                                entry: entry,
+                              ),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
@@ -241,19 +245,35 @@ class _QuickAction extends ConsumerWidget {
     final value = entry?.value;
     switch (tracker.type) {
       case TrackerType.checkbox:
-        final done = value is BoolValue && value.value;
-        return IconButton.filledTonal(
-          tooltip: done ? 'Change' : 'Mark ${tracker.config.yesLabel}',
-          isSelected: done,
+        // The one-tap action always logs the *winning* answer: ✓ when "Done"
+        // is the win, ✗ when "Skipped" is the win (quitting a habit). Once
+        // logged, the button shows the answer — green for a win, red if not.
+        final win = tracker.winAnswer;
+        final logged = value is BoolValue ? value.value : null;
+        if (logged == null) {
+          return IconButton.filledTonal(
+            tooltip: 'Mark ${tracker.winLabel}',
+            style: IconButton.styleFrom(
+              minimumSize: const Size(48, 48),
+              backgroundColor: Palette.success.withValues(alpha: 0.14),
+              foregroundColor: Palette.success,
+            ),
+            onPressed: () => actions.save(tracker, day, BoolValue(win)),
+            icon: Icon(Palette.iconForAnswer(win)),
+          );
+        }
+        final isWin = logged == win;
+        return IconButton.filled(
+          tooltip:
+              '${logged ? tracker.config.yesLabel : tracker.config.noLabel}'
+              ' — tap to change',
           style: IconButton.styleFrom(
             minimumSize: const Size(48, 48),
-            backgroundColor: done ? Palette.success : null,
-            foregroundColor: done ? Colors.white : null,
+            backgroundColor: isWin ? Palette.success : Palette.failure,
+            foregroundColor: Colors.white,
           ),
-          onPressed: done
-              ? onOpen
-              : () => actions.save(tracker, day, const BoolValue(true)),
-          icon: const Icon(Icons.check_rounded),
+          onPressed: onOpen,
+          icon: Icon(Palette.iconForAnswer(logged)),
         );
       case TrackerType.time when entry == null && isToday:
         return FilledButton.tonal(

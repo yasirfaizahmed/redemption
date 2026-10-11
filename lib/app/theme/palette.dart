@@ -1,6 +1,9 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../../domain/models.dart';
 import '../../domain/scoring.dart';
+import '../../domain/tracker_type.dart';
+import '../../domain/tracker_value.dart';
 
 /// Brand + semantic colours that stay meaningful in light and dark themes.
 abstract final class Palette {
@@ -49,6 +52,23 @@ abstract final class Palette {
         EntryStatus.pending => scheme.outline,
         EntryStatus.notExpected => scheme.outlineVariant,
       };
+
+  /// ✓ for "yes", ✗ for "no" — the answer itself, independent of whether
+  /// it was the win (colour carries that: green = win, red = loss).
+  static IconData iconForAnswer(bool answer) =>
+      answer ? Icons.check_rounded : Icons.close_rounded;
+
+  /// Status icon for a tracker's day. Yes/No trackers show the logged answer
+  /// (so winning by "Skipped" shows a green ✗), others the generic status.
+  static IconData iconFor(Tracker tracker, Entry? entry, EntryStatus status) {
+    final value = entry?.value;
+    if (tracker.type == TrackerType.checkbox &&
+        value is BoolValue &&
+        status != EntryStatus.notExpected) {
+      return iconForAnswer(value.value);
+    }
+    return iconForStatus(status);
+  }
 
   static IconData iconForStatus(EntryStatus status) => switch (status) {
     EntryStatus.done => Icons.check_rounded,

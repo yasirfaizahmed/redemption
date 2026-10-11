@@ -14,6 +14,7 @@ import '../../core/widgets/common.dart';
 import '../../domain/app_settings.dart';
 import '../../domain/formatting.dart';
 import '../../state/providers.dart';
+import 'drive_backup.dart';
 
 final _log = Logger('Settings');
 
@@ -311,6 +312,8 @@ class SettingsScreen extends ConsumerWidget {
             onTap: () => context.push(Routes.newJourney),
           ),
 
+          const DriveBackupSection(),
+
           const SectionHeader('Your data'),
           ListTile(
             leading: const Icon(Icons.backup_outlined),
@@ -334,7 +337,8 @@ class SettingsScreen extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: Text(
-              'Everything stays on this device. No account, no cloud, no tracking.',
+              'Your data lives on this phone. Nothing leaves it unless you turn '
+              'on Google Drive backup or export it yourself. No ads, no tracking.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),

@@ -4,7 +4,6 @@ import 'package:material_ui/material_ui.dart';
 import '../../../app/theme/palette.dart';
 import '../../../domain/models.dart';
 import '../../../domain/tracker_config.dart';
-import '../../../domain/tracker_goal.dart';
 import '../../../domain/tracker_value.dart';
 
 /// Two large, thumb-friendly tiles: Yes / No.
@@ -22,32 +21,20 @@ class CheckboxInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final goal = tracker.goal;
-    final target = goal is BoolGoal ? goal.target : true;
+    final win = tracker.winAnswer;
     final current = value is BoolValue ? (value! as BoolValue).value : null;
-    return Row(
-      children: [
-        Expanded(
-          child: BigChoiceTile(
-            label: tracker.config.yesLabel,
-            icon: Icons.check_rounded,
-            color: target ? Palette.success : Palette.failure,
-            selected: current == true,
-            onTap: () => onChanged(const BoolValue(true)),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: BigChoiceTile(
-            label: tracker.config.noLabel,
-            icon: Icons.close_rounded,
-            color: target ? Palette.failure : Palette.success,
-            selected: current == false,
-            onTap: () => onChanged(const BoolValue(false)),
-          ),
-        ),
-      ],
+    Widget tile(bool answer) => Expanded(
+      child: BigChoiceTile(
+        label: answer ? tracker.config.yesLabel : tracker.config.noLabel,
+        icon: Palette.iconForAnswer(answer),
+        // Green for the winning answer, red for the other — whichever it is.
+        color: answer == win ? Palette.success : Palette.failure,
+        selected: current == answer,
+        onTap: () => onChanged(BoolValue(answer)),
+      ),
     );
+    // The winning answer always comes first.
+    return Row(children: [tile(win), const SizedBox(width: 12), tile(!win)]);
   }
 }
 

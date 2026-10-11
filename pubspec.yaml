@@ -2,7 +2,7 @@ name: redemption
 description: "Redemption — rewire your brain in 90 days. A fully customisable daily discipline tracker."
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
   sdk: ^3.13.5
@@ -44,6 +44,9 @@ dependencies:
   cross_file: ^0.3.5
   material_ui: ^1.6.0
   cupertino_ui: ^1.1.2
+  google_sign_in: ^7.2.0
+  google_sign_in_platform_interface: ^3.1.0
+  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:

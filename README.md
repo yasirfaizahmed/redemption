@@ -42,7 +42,8 @@ Journeys can be any length (7–365 days); phases scale proportionally.
 - 13 input types: Yes/No · single choice (each option has its own credit) ·
   multiple choice (add tags on the fly) · time of day · duration · counter ·
   number · decimal · rating (stars / emoji / 1–10) · short text · notes · photo · file.
-- Goals per tracker: *log it*, yes-is-the-win **or no-is-the-win** (for quitting habits),
+- Goals per tracker: *log it*, yes-is-the-win **or no-is-the-win** (for quitting habits — the
+  one-tap button then logs the “No”, shown as a green ✗),
   at least / at most / between (with partial credit), before / after a time (with a grace window),
   or option-based credit (e.g. prayer *in congregation* 100 %, *late* 50 %, *missed* 0 %).
 - Planned time, section, weekday schedule, optional vs. required, per-tracker reminders.
@@ -70,7 +71,11 @@ rewiring phase, intention & daily quote.
   reminder status — shareable when you need to debug. No telemetry, ever.
 
 **Yours, privately**
-- Everything is local (SQLite). No account, no server.
+- Everything is local (SQLite). No account needed, no server of ours.
+- Optional **Google Drive backup** into a hidden app folder of *your* Drive: automatic,
+  versioned (one snapshot per day, 10 kept), never uploads an empty app, and a fresh install
+  can restore its journey from the welcome screen. One-time Google Cloud setup:
+  [docs/google-drive-setup.md](docs/google-drive-setup.md).
 - Full ZIP backup (data + photos) and restore; CSV export for Sheets/pandas.
 - Android Auto Backup covers the database.
 
@@ -138,7 +143,8 @@ lib/
 │                          analytics (streaks, stats, series), templates, phases, quotes
 ├── data/                  Drift (SQLite) schema + type converters, repositories,
 │                          attachment store, ZIP/CSV backup
-├── services/              local notifications (timezone-aware, exact/inexact fallback)
+├── services/              local notifications (timezone-aware, exact/inexact fallback),
+│                          Google Drive backup (REST client, authorization, snapshots)
 ├── state/                 Riverpod providers (reactive streams → derived analytics), actions
 └── features/              onboarding · dashboard (+ editor) · today · entry sheet & inputs ·
                            plan & tracker editor · insights · journey · settings · diagnostics
@@ -159,14 +165,17 @@ lib/
 ```bash
 flutter analyze                         # strict lints, zero issues
 dart format --set-exit-if-changed lib test
-flutter test                            # 50+ unit, repository & widget tests
+flutter test                            # 70 unit, repository & widget tests
 SCREENSHOTS=1 flutter test test/screenshots --update-goldens   # regenerate docs/screenshots
 ```
 
 Tests cover the day boundary and DST arithmetic, every goal type, streak rules
 (“an unfinished today never breaks a streak”), midnight-safe time averages, JSON round trips,
-repositories (cascade, upsert, slotting, archive, backup restore) and full app flows
-(onboarding, one-tap logging, creating a tracker, 200 % text scale on every tab).
+repositories (cascade, upsert, slotting, archive, backup restore), the Drive client (paging,
+resumable upload, token refresh) and snapshot rules (daily versions, pruning, device settings
+kept on restore), and full app flows (onboarding, one-tap logging incl. quit-style Yes/No,
+connecting Drive, restoring a fresh install from Drive, creating a tracker, 200 % text scale
+on every tab).
 
 CI (`.github/workflows/ci.yml`) runs codegen drift checks, formatting, analysis and tests,
 then builds APKs (and an AAB + GitHub Release on `v*` tags). The workflow token is read-only
@@ -197,7 +206,7 @@ On a Mac: `cd ios && pod install`, open `Runner.xcworkspace`, pick your team, ru
 
 - Home-screen widget (today’s ring + next item).
 - Prayer-time aware reminders (location-based adhan times).
-- Optional encrypted cloud sync.
+- End-to-end encrypted Drive backups (passphrase).
 
 ---
 

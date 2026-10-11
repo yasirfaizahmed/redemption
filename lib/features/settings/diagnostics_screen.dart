@@ -10,6 +10,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../../core/logging/app_logger.dart';
 import '../../core/widgets/common.dart';
+import '../../domain/app_settings.dart';
 import '../../domain/formatting.dart';
 import '../../state/providers.dart';
 
@@ -89,6 +90,7 @@ class _DiagnosticsScreenState extends ConsumerState<DiagnosticsScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final diag = ref.watch(_diagnosticsProvider);
+    final settings = ref.watch(settingsValueProvider);
     final logger = AppLogger.instance;
 
     return Scaffold(
@@ -135,6 +137,15 @@ class _DiagnosticsScreenState extends ConsumerState<DiagnosticsScreen> {
                   value: '${d.pendingReminders}',
                   label: 'Scheduled reminders',
                   icon: Icons.alarm_rounded,
+                ),
+                MetricTile(
+                  value: switch (settings) {
+                    AppSettings(driveConnected: false) => 'Off',
+                    AppSettings(driveLastBackupAt: final at?) => Fmt.ago(at),
+                    _ => 'Pending',
+                  },
+                  label: 'Google Drive backup',
+                  icon: Icons.cloud_outlined,
                 ),
                 MetricTile(
                   value: switch (d.notificationsEnabled) {

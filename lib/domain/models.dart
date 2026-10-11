@@ -137,6 +137,16 @@ class Tracker {
 
   bool get isArchived => archivedOn != null;
 
+  /// For Yes/No trackers: the answer that counts as the win. `false` for
+  /// habits being quit ("Skipped" / "Stayed away" is the win).
+  bool get winAnswer => switch (goal) {
+    BoolGoal(:final target) => target,
+    _ => true,
+  };
+
+  /// Label of the winning answer, e.g. "Done" or "Skipped".
+  String get winLabel => winAnswer ? config.yesLabel : config.noLabel;
+
   bool isScheduledOn(Day day) => Weekdays.has(weekdays, day.weekday);
 
   bool isActiveOn(Day day) =>

@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../../core/time/day.dart';
+import '../../domain/app_settings.dart';
 import '../../domain/formatting.dart';
 import '../../domain/models.dart';
 import '../../domain/scoring.dart';
@@ -32,6 +33,9 @@ class BackupService {
   final AttachmentStore _attachments;
 
   static const format = 'redemption-backup';
+
+  /// Settings that belong to the device, never overwritten by a restore.
+  static final deviceSettingKeys = {...AppSettings.driveKeys, 'installId'};
   static const formatVersion = 1;
 
   Future<Map<String, dynamic>> buildSnapshot() async {
@@ -45,7 +49,10 @@ class BackupService {
       'version': formatVersion,
       'schemaVersion': _db.schemaVersion,
       'exportedAt': DateTime.now().toUtc().toIso8601String(),
-      'settings': {for (final s in settings) s.key: s.value},
+      'settings': {
+        for (final s in settings)
+          if (!deviceSettingKeys.contains(s.key)) s.key: s.value,
+      },
       'journeys': [for (final j in journeys) j.toJson()],
       'trackers': [for (final t in trackers) t.toJson()],
       'entries': [for (final e in entries) e.toJson()],
@@ -53,8 +60,8 @@ class BackupService {
     };
   }
 
-  /// Writes a `.zip` backup into the temp directory and returns it.
-  Future<File> exportZip() async {
+  /// The full backup (data + attachments) as ZIP bytes.
+  Future<Uint8List> buildZipBytes() async {
     final snapshot = await buildSnapshot();
     final archive = Archive()
       ..addFile(
@@ -74,23 +81,40 @@ class BackupService {
       count++;
     }
     final bytes = ZipEncoder().encodeBytes(archive);
+    _log.info('Built backup: ${bytes.length} bytes, $count attachments');
+    return bytes;
+  }
+
+  /// Writes a `.zip` backup into the temp directory and returns it.
+  Future<File> exportZip() async {
+    final bytes = await buildZipBytes();
     final dir = await getTemporaryDirectory();
     final stamp = DateTime.now().toIso8601String().substring(0, 10);
     final out = File(p.join(dir.path, 'redemption-backup-$stamp.zip'));
     await out.writeAsBytes(bytes, flush: true);
-    _log.info('Exported backup: ${bytes.length} bytes, $count attachments');
     return out;
   }
 
-  /// Restores from a `.zip` (or bare `.json`) backup, replacing ALL data.
-  Future<void> importFile(File file) async {
-    final bytes = await file.readAsBytes();
+  /// Restores from a `.zip` (or bare `.json`) backup file, replacing ALL data.
+  Future<void> importFile(File file) async => importBytes(
+    await file.readAsBytes(),
+    isJson: file.path.toLowerCase().endsWith('.json'),
+  );
+
+  /// Restores from backup bytes, replacing ALL data. The archive is fully
+  /// validated before anything on the device is touched.
+  Future<void> importBytes(List<int> bytes, {bool isJson = false}) async {
     Map<String, dynamic> snapshot;
     final attachments = <String, List<int>>{};
-    if (file.path.toLowerCase().endsWith('.json')) {
+    if (isJson) {
       snapshot = _decode(utf8.decode(bytes));
     } else {
-      final archive = ZipDecoder().decodeBytes(bytes);
+      final Archive archive;
+      try {
+        archive = ZipDecoder().decodeBytes(bytes);
+      } catch (_) {
+        throw BackupException('This file is not a valid Redemption backup.');
+      }
       final json = archive.findFile('backup.json');
       if (json == null) {
         throw BackupException('This ZIP is not a Redemption backup.');
@@ -133,6 +157,11 @@ class BackupService {
         e as Map<String, dynamic>,
     ];
     await _db.transaction(() async {
+      // Device-specific settings (Drive connection, install id) describe this
+      // phone, not the data — keep them instead of the backup's copies.
+      final keep = await (_db.select(
+        _db.settings,
+      )..where((r) => r.key.isIn(deviceSettingKeys))).get();
       await _db.delete(_db.entries).go();
       await _db.delete(_db.dashboardItems).go();
       await _db.delete(_db.trackers).go();
@@ -154,7 +183,12 @@ class BackupService {
         final settings = s['settings'] as Map<String, dynamic>? ?? const {};
         b.insertAll(_db.settings, [
           for (final e in settings.entries)
-            SettingsCompanion.insert(key: e.key, value: '${e.value}'),
+            if (!deviceSettingKeys.contains(e.key))
+              SettingsCompanion.insert(key: e.key, value: '${e.value}'),
+        ]);
+        b.insertAll(_db.settings, [
+          for (final r in keep)
+            SettingsCompanion.insert(key: r.key, value: r.value),
         ]);
       });
     });

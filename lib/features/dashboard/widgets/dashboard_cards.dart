@@ -460,6 +460,7 @@ class TodayStripCard extends ConsumerWidget {
             Expanded(
               child: _StripItem(
                 tracker: t,
+                entry: index.get(t.id, today),
                 status: scoring.status(t, index.get(t.id, today), today, today),
                 onTap: () =>
                     showEntrySheet(context, trackerId: t.id, day: today),
@@ -474,10 +475,12 @@ class TodayStripCard extends ConsumerWidget {
 class _StripItem extends StatelessWidget {
   const _StripItem({
     required this.tracker,
+    required this.entry,
     required this.status,
     required this.onTap,
   });
   final Tracker tracker;
+  final Entry? entry;
   final EntryStatus status;
   final VoidCallback onTap;
 
@@ -495,7 +498,12 @@ class _StripItem extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Column(
             children: [
-              TrackerAvatar(tracker: tracker, status: status, size: 46),
+              TrackerAvatar(
+                tracker: tracker,
+                status: status,
+                entry: entry,
+                size: 46,
+              ),
               const SizedBox(height: 6),
               Text(
                 tracker.name,

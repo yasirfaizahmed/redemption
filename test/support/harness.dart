@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:drift/drift.dart' show DatabaseConnection, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:redemption/app/app.dart';
@@ -77,11 +78,16 @@ void usePhoneSurface(WidgetTester tester, {double textScale = 1}) {
   addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 }
 
-Widget buildApp(TestEnv env, {DateTime? now}) => ProviderScope(
+Widget buildApp(
+  TestEnv env, {
+  DateTime? now,
+  List<Override> overrides = const [],
+}) => ProviderScope(
   overrides: [
     databaseProvider.overrideWithValue(env.db),
     attachmentStoreProvider.overrideWithValue(AttachmentStore(env.dir)),
     clockProvider.overrideWith(() => FixedClock(now ?? testNow)),
+    ...overrides,
   ],
   child: const RedemptionApp(),
 );

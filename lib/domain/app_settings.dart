@@ -26,6 +26,11 @@ class AppSettings {
     this.checkInEnabled = false,
     this.checkInMinutes = 21 * 60 + 30,
     this.quotePack = QuotePack.both,
+    this.installId = '',
+    this.driveConnected = false,
+    this.driveEmail = '',
+    this.driveAutoBackup = true,
+    this.driveLastBackupAt,
   });
 
   factory AppSettings.fromMap(Map<String, String> m) {
@@ -53,8 +58,22 @@ class AppSettings {
         (q) => q.name == m['quotePack'],
         orElse: () => d.quotePack,
       ),
+      installId: m['installId'] ?? d.installId,
+      driveConnected: b('driveConnected') ?? d.driveConnected,
+      driveEmail: m['driveEmail'] ?? d.driveEmail,
+      driveAutoBackup: b('driveAutoBackup') ?? d.driveAutoBackup,
+      driveLastBackupAt: DateTime.tryParse(m['driveLastBackupAt'] ?? ''),
     );
   }
+
+  /// Keys describing this device's Google Drive connection. They are kept
+  /// when a backup is restored (the backup carries the old device's values).
+  static const driveKeys = {
+    'driveConnected',
+    'driveEmail',
+    'driveAutoBackup',
+    'driveLastBackupAt',
+  };
 
   static const defaultSeed = 0xFF0E9F6E;
 
@@ -78,6 +97,15 @@ class AppSettings {
   final int checkInMinutes;
   final QuotePack quotePack;
 
+  /// Random id of this installation, tagged on Drive backups.
+  final String installId;
+
+  /// Google Drive backup (stored in the hidden app folder of the user's Drive).
+  final bool driveConnected;
+  final String driveEmail;
+  final bool driveAutoBackup;
+  final DateTime? driveLastBackupAt;
+
   Map<String, String> toMap() => {
     'themeMode': themeMode.name,
     'seedColor': '$seedColor',
@@ -92,6 +120,11 @@ class AppSettings {
     'checkInEnabled': '$checkInEnabled',
     'checkInMinutes': '$checkInMinutes',
     'quotePack': quotePack.name,
+    'installId': installId,
+    'driveConnected': '$driveConnected',
+    'driveEmail': driveEmail,
+    'driveAutoBackup': '$driveAutoBackup',
+    'driveLastBackupAt': driveLastBackupAt?.toUtc().toIso8601String() ?? '',
   };
 
   AppSettings copyWith({
@@ -108,6 +141,11 @@ class AppSettings {
     bool? checkInEnabled,
     int? checkInMinutes,
     QuotePack? quotePack,
+    String? installId,
+    bool? driveConnected,
+    String? driveEmail,
+    bool? driveAutoBackup,
+    DateTime? Function()? driveLastBackupAt,
   }) => AppSettings(
     themeMode: themeMode ?? this.themeMode,
     seedColor: seedColor ?? this.seedColor,
@@ -122,5 +160,12 @@ class AppSettings {
     checkInEnabled: checkInEnabled ?? this.checkInEnabled,
     checkInMinutes: checkInMinutes ?? this.checkInMinutes,
     quotePack: quotePack ?? this.quotePack,
+    installId: installId ?? this.installId,
+    driveConnected: driveConnected ?? this.driveConnected,
+    driveEmail: driveEmail ?? this.driveEmail,
+    driveAutoBackup: driveAutoBackup ?? this.driveAutoBackup,
+    driveLastBackupAt: driveLastBackupAt != null
+        ? driveLastBackupAt()
+        : this.driveLastBackupAt,
   );
 }

@@ -7,6 +7,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../domain/app_settings.dart';
 import '../domain/models.dart';
+import '../state/drive_sync.dart';
 import '../state/providers.dart';
 import 'router.dart';
 import 'theme/app_theme.dart';
@@ -22,14 +23,18 @@ class RedemptionApp extends ConsumerStatefulWidget {
 
 class _RedemptionAppState extends ConsumerState<RedemptionApp> {
   late final AppLifecycleListener _lifecycle;
+  late final DriveAutoBackup _autoBackup;
   StreamSubscription<String>? _taps;
   Timer? _syncDebounce;
 
   @override
   void initState() {
     super.initState();
+    _autoBackup = DriveAutoBackup(ref)..start();
     _lifecycle = AppLifecycleListener(
       onResume: () => ref.read(clockProvider.notifier).refresh(),
+      // Leaving the app: upload pending changes now rather than later.
+      onHide: _autoBackup.flush,
     );
     final notifications = ref.read(notificationServiceProvider);
     _taps = notifications.taps.listen(_handlePayload);
@@ -44,6 +49,7 @@ class _RedemptionAppState extends ConsumerState<RedemptionApp> {
   @override
   void dispose() {
     _lifecycle.dispose();
+    _autoBackup.dispose();
     _syncDebounce?.cancel();
     unawaited(_taps?.cancel());
     super.dispose();

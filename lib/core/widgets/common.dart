@@ -12,6 +12,7 @@ class TrackerAvatar extends StatelessWidget {
     required this.tracker,
     this.size = 44,
     this.status,
+    this.entry,
   });
 
   final Tracker tracker;
@@ -19,6 +20,9 @@ class TrackerAvatar extends StatelessWidget {
 
   /// When set, a small status badge is drawn in the corner.
   final EntryStatus? status;
+
+  /// The logged entry, so Yes/No badges can show the answer (✓ / ✗).
+  final Entry? entry;
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +63,7 @@ class TrackerAvatar extends StatelessWidget {
                   border: Border.all(color: scheme.surface, width: 2),
                 ),
                 child: Icon(
-                  Palette.iconForStatus(status!),
+                  Palette.iconFor(tracker, entry, status!),
                   size: size * 0.26,
                   color: Colors.white,
                 ),

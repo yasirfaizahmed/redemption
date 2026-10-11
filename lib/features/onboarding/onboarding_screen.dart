@@ -6,8 +6,10 @@ import '../../core/time/time_of_day_x.dart';
 import '../../core/widgets/tracker_icons.dart';
 import '../../domain/neuro_phase.dart';
 import '../../domain/templates.dart';
+import '../../state/drive_sync.dart';
 import '../../state/providers.dart';
 import '../journey/journey_form.dart';
+import '../settings/drive_backup.dart';
 
 /// First-run flow: the why → pick a template → shape the journey.
 class OnboardingScreen extends ConsumerStatefulWidget {
@@ -108,7 +110,17 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 physics: const NeverScrollableScrollPhysics(),
                 onPageChanged: (p) => setState(() => _page = p),
                 children: [
-                  _WelcomePage(onNext: () => _go(1)),
+                  _WelcomePage(
+                    onNext: () => _go(1),
+                    onRestore: ref.watch(driveAuthProvider).isSupported
+                        ? () => connectGoogleDrive(
+                            context,
+                            ref,
+                            freshInstall: true,
+                          )
+                        : null,
+                    restoring: ref.watch(driveSyncProvider).busy,
+                  ),
                   _TemplatePage(
                     selected: _template,
                     onSelected: _pickTemplate,
@@ -143,8 +155,17 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 }
 
 class _WelcomePage extends StatelessWidget {
-  const _WelcomePage({required this.onNext});
+  const _WelcomePage({
+    required this.onNext,
+    required this.onRestore,
+    required this.restoring,
+  });
   final VoidCallback onNext;
+
+  /// Reinstalled? Bring the journey back from Google Drive. Null when Drive
+  /// backup isn't available on this device.
+  final VoidCallback? onRestore;
+  final bool restoring;
 
   @override
   Widget build(BuildContext context) {
@@ -227,15 +248,36 @@ class _WelcomePage extends StatelessWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+          padding: EdgeInsets.fromLTRB(20, 8, 20, onRestore == null ? 16 : 4),
           child: SizedBox(
             width: double.infinity,
             child: FilledButton(
-              onPressed: onNext,
+              onPressed: restoring ? null : onNext,
               child: const Text('Let’s build it'),
             ),
           ),
         ),
+        if (onRestore != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            child: SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
+                onPressed: restoring ? null : onRestore,
+                icon: restoring
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.cloud_download_outlined),
+                label: Text(
+                  restoring
+                      ? 'Bringing your journey back…'
+                      : 'Restore from Google Drive',
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
