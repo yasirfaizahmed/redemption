@@ -18,6 +18,15 @@ class DriveConnectException implements Exception {
   String toString() => message;
 }
 
+/// Google could not be asked for a token right now (offline, Play services
+/// busy). Unlike a missing grant, this needs no reconnect — just a retry.
+class DriveAuthUnavailableException implements Exception {
+  DriveAuthUnavailableException(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+
 /// Grants and refreshes access to the `drive.appdata` scope.
 abstract interface class DriveAuth implements AccessTokenProvider {
   /// Whether Google Drive backup can work on this platform/build.
@@ -91,19 +100,30 @@ class GoogleDriveAuth implements DriveAuth {
     return tokens?.accessToken;
   }
 
+  /// Null means there is no grant (the user must reconnect); a platform
+  /// failure throws [DriveAuthUnavailableException] instead.
   @override
   Future<String?> accessToken() async {
     if (!isSupported) return null;
     if (_token != null) return _token;
+    await _init();
+    final hint = _accountHint;
+    if (hint != null) {
+      try {
+        final token = await _silentToken(hint);
+        if (token != null) return _token = token;
+      } on GoogleSignInException catch (e) {
+        // e.g. the account was removed from the phone: try without the hint.
+        _log.info('Hinted authorization failed: ${e.code} ${e.description}');
+      }
+    }
     try {
-      await _init();
-      final hint = _accountHint;
-      var token = await _silentToken(hint);
-      if (token == null && hint != null) token = await _silentToken(null);
-      return _token = token;
+      return _token = await _silentToken(null);
     } on GoogleSignInException catch (e) {
       _log.warning('Silent authorization failed: ${e.code} ${e.description}');
-      return null;
+      throw DriveAuthUnavailableException(
+        'Couldn’t reach Google (${e.description ?? e.code.name})',
+      );
     }
   }
 
@@ -144,10 +164,19 @@ class GoogleDriveAuth implements DriveAuth {
             'See docs/google-drive-setup.md in the project.',
           );
         default:
+          // Android reports backing out of the account/consent screen as an
+          // SDK exception with status 16 (CANCELED) or 12501.
+          if (_isCancel(e)) {
+            throw DriveConnectException('Connection canceled.', canceled: true);
+          }
           throw DriveConnectException(_describe(e));
       }
     }
   }
+
+  static bool _isCancel(GoogleSignInException e) =>
+      e.code == GoogleSignInExceptionCode.unknownError &&
+      RegExp(r'exception: (16|12501)\b').hasMatch(e.description ?? '');
 
   /// Android reports a missing/mismatched Cloud project registration as an
   /// SDK error with code 10 (DEVELOPER_ERROR).
@@ -164,9 +193,16 @@ class GoogleDriveAuth implements DriveAuth {
   @override
   Future<void> disconnect() async {
     try {
-      final token = _token ?? await accessToken();
+      await _init();
+      final token = _token;
+      // Asking for a token with the account's email registers that account
+      // with the plugin, which is what lets disconnect() revoke its grant.
+      if (_accountHint != null) {
+        try {
+          await _silentToken(_accountHint);
+        } catch (_) {}
+      }
       if (token != null) await invalidate(token);
-      _token = null;
       await _signIn.disconnect();
     } catch (e) {
       _log.warning('Disconnect failed: $e');

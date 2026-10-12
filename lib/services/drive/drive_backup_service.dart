@@ -16,6 +16,14 @@ class DriveBackupException implements Exception {
   String toString() => message;
 }
 
+/// Today's file for this install id was written by someone else — another
+/// phone that inherited the id (Android device transfer) or this app before
+/// Android restored an older copy of its database. Overwriting it would lose
+/// newer data, so the caller must continue under a fresh install id.
+class InstallIdConflict implements Exception {
+  const InstallIdConflict();
+}
+
 /// One snapshot stored in Google Drive.
 class DriveBackup {
   const DriveBackup(this.file);
@@ -40,6 +48,7 @@ class DriveBackupService {
     required this.backup,
     required this.db,
     this.keep = 10,
+    this.keepInstalls = 5,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now;
 
@@ -49,6 +58,10 @@ class DriveBackupService {
   final BackupService backup;
   final AppDatabase db;
   final int keep;
+
+  /// How many other installs (phones, reinstalls, restores) keep their
+  /// newest snapshot beyond [keep].
+  final int keepInstalls;
   final DateTime Function() _clock;
 
   static bool isBackupFile(DriveFile f) =>
@@ -88,16 +101,34 @@ class DriveBackupService {
   ///
   /// Refuses to upload an empty database: on a fresh reinstall that would
   /// overwrite a good backup before the user has had a chance to restore it.
-  Future<DriveBackup> backupNow({required String installId}) async {
+  ///
+  /// [lastUploadAt] is the Drive time of this install's previous upload;
+  /// today's file is only updated in place if nobody else wrote it since,
+  /// otherwise [InstallIdConflict] is thrown.
+  Future<DriveBackup> backupNow({
+    required String installId,
+    DateTime? lastUploadAt,
+  }) async {
     final watch = Stopwatch()..start();
     final counts = await _counts();
     if (counts.journeys == 0) {
       throw DriveBackupException('Nothing to back up yet.');
     }
-    final bytes = await backup.buildZipBytes();
     final name = fileNameFor(_clock(), installId);
     final existing = (await client.list()).where(isBackupFile).toList();
     final sameDay = existing.where((f) => f.name == name).firstOrNull;
+    if (sameDay != null &&
+        (lastUploadAt == null ||
+            sameDay.modifiedTime.isAfter(
+              lastUploadAt.add(const Duration(seconds: 2)),
+            ))) {
+      _log.warning(
+        '${sameDay.name} was changed elsewhere (${sameDay.modifiedTime}, '
+        'ours $lastUploadAt); not overwriting it',
+      );
+      throw const InstallIdConflict();
+    }
+    final bytes = await backup.buildZipBytes();
     final file = await client.upload(
       name: name,
       bytes: bytes,
@@ -118,16 +149,22 @@ class DriveBackupService {
     return DriveBackup(file);
   }
 
-  /// Keeps the newest [keep] snapshots, plus the newest snapshot of every
-  /// other install — so a new phone can never prune away the last backup of
-  /// the old one.
+  /// Keeps the newest [keep] snapshots, plus the newest snapshot of up to
+  /// [keepInstalls] other installs — so a new phone can never prune away the
+  /// last backup of the old one.
   Future<void> _prune() async {
     final all = await list();
-    final newestPerInstall = <String>{};
+    final installs = <String>{};
     final keepIds = <String>{};
+    var extra = 0;
     for (final (i, b) in all.indexed) {
-      final firstOfInstall = newestPerInstall.add(b.installId);
-      if (i < keep || firstOfInstall) keepIds.add(b.file.id);
+      final firstOfInstall = installs.add(b.installId);
+      if (i < keep) {
+        keepIds.add(b.file.id);
+      } else if (firstOfInstall && extra < keepInstalls) {
+        keepIds.add(b.file.id);
+        extra++;
+      }
     }
     for (final old in all.where((b) => !keepIds.contains(b.file.id))) {
       try {

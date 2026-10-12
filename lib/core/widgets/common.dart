@@ -3,6 +3,8 @@ import 'package:material_ui/material_ui.dart';
 import '../../app/theme/palette.dart';
 import '../../domain/models.dart';
 import '../../domain/scoring.dart';
+import '../../domain/tracker_type.dart';
+import '../../domain/tracker_value.dart';
 import 'tracker_icons.dart';
 
 /// Tracker icon inside a soft, colour-tinted circle.
@@ -29,6 +31,9 @@ class TrackerAvatar extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final color = Color(tracker.color);
     final done = status == EntryStatus.done;
+    // Yes/No trackers always show the logged answer (✓ / ✗), green on a win.
+    final showsAnswer =
+        tracker.type == TrackerType.checkbox && entry?.value is BoolValue;
     return SizedBox.square(
       dimension: size,
       child: Stack(
@@ -51,7 +56,7 @@ class TrackerAvatar extends StatelessWidget {
           if (status != null &&
               status != EntryStatus.pending &&
               status != EntryStatus.notExpected &&
-              !done)
+              (!done || showsAnswer))
             Positioned(
               right: -2,
               bottom: -2,

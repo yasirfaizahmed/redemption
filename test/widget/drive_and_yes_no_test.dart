@@ -5,6 +5,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:redemption/app/theme/palette.dart';
+import 'package:redemption/core/widgets/common.dart';
 import 'package:redemption/data/backup/backup_service.dart';
 import 'package:redemption/data/db/database.dart';
 import 'package:redemption/data/repositories/entry_repository.dart';
@@ -74,6 +75,25 @@ void main() {
       find.ancestor(of: logged, matching: find.byType(IconButton)).first,
     );
     expect(button.style?.backgroundColor?.resolve({}), Palette.success);
+
+    // The avatar's badge also shows the answer: a green ✗.
+    final avatar = find.ancestor(
+      of: find.byIcon(Icons.close_rounded),
+      matching: find.byType(TrackerAvatar),
+    );
+    expect(avatar, findsOneWidget);
+    final badge = tester.widget<Container>(
+      find
+          .ancestor(
+            of: find.descendant(
+              of: avatar,
+              matching: find.byIcon(Icons.close_rounded),
+            ),
+            matching: find.byType(Container),
+          )
+          .first,
+    );
+    expect((badge.decoration! as BoxDecoration).color, Palette.success);
   });
 
   testWidgets('connecting Google Drive from settings uploads a backup', (

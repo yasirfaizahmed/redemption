@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:drift/drift.dart' show DatabaseConnection, driftRuntimeOptions;
 import 'package:drift/native.dart';
@@ -17,6 +18,7 @@ import 'package:redemption/domain/templates.dart';
 import 'package:redemption/domain/tracker_value.dart';
 import 'package:redemption/services/drive/drive_backup_service.dart';
 import 'package:redemption/services/drive/drive_client.dart';
+import 'package:redemption/services/drive/google_drive_auth.dart';
 import 'package:redemption/state/drive_sync.dart';
 import 'package:redemption/state/providers.dart';
 
@@ -78,9 +80,12 @@ void main() {
     await _seed(db);
     final s = service();
 
-    await s.backupNow(installId: 'abcdef0123456789');
+    final first = await s.backupNow(installId: 'abcdef0123456789');
     now = now.add(const Duration(hours: 8));
-    final second = await s.backupNow(installId: 'abcdef0123456789');
+    final second = await s.backupNow(
+      installId: 'abcdef0123456789',
+      lastUploadAt: first.createdAt,
+    );
 
     expect(drive.files, hasLength(1));
     expect(second.file.name, 'redemption-backup-2026-10-10-abcdef01.zip');
@@ -118,6 +123,27 @@ void main() {
       expect(remaining.first.installId, 'newphone00000000');
     },
   );
+
+  test('a same-day file written elsewhere is never overwritten', () async {
+    await _seed(db);
+    final s = service();
+    final mine = await s.backupNow(installId: 'abcdef0123456789');
+    // Another phone with the same id (or this app before Android restored
+    // an older database) updates today's file later on.
+    now = now.add(const Duration(hours: 3));
+    await drive.upload(
+      name: mine.file.name,
+      bytes: drive.contents[mine.file.id]!,
+      existingId: mine.file.id,
+      appProperties: mine.file.appProperties,
+    );
+    now = now.add(const Duration(hours: 1));
+    await expectLater(
+      s.backupNow(installId: 'abcdef0123456789', lastUploadAt: mine.createdAt),
+      throwsA(isA<InstallIdConflict>()),
+    );
+    expect(drive.files, hasLength(1));
+  });
 
   test('file names tolerate short install ids', () {
     final s = service();
@@ -226,6 +252,68 @@ void main() {
       s = await load();
       expect(s.driveConnected, isFalse);
       expect(s.driveLastBackupAt, isNull);
+    });
+
+    test('an inherited install id starts a new file instead of '
+        'overwriting newer data', () async {
+      await _seed(db);
+      await sync().connect();
+      final svc = container.read(driveBackupServiceProvider);
+      final today = svc.fileNameFor(DateTime.now(), 'oldphone00000000');
+      final theirs = await drive.upload(
+        name: today,
+        bytes: Uint8List.fromList([1, 2, 3]),
+        appProperties: {'installId': 'oldphone00000000'},
+      );
+      // Android restored an older copy of the database: same id, older stamp.
+      final repo = container.read(settingsRepositoryProvider);
+      await repo.save(
+        (await repo.load()).copyWith(
+          installId: 'oldphone00000000',
+          driveLastBackupAt: () =>
+              theirs.modifiedTime.subtract(const Duration(hours: 6)),
+        ),
+      );
+
+      expect(await sync().backupNow(), isTrue);
+      expect(drive.files, hasLength(2));
+      expect(drive.contents[theirs.id], [1, 2, 3], reason: 'left untouched');
+      final s = await load();
+      expect(s.installId, isNot('oldphone00000000'));
+    });
+
+    test('after a restore, uploads go to a new file', () async {
+      await _seed(db);
+      await sync().connect();
+      expect(await sync().backupNow(), isTrue);
+      final before = (await sync().listBackups()).single;
+
+      await sync().restore(before);
+      var s = await load();
+      expect(s.installId, isEmpty);
+      expect(s.driveConnected, isTrue);
+
+      expect(await sync().backupNow(), isTrue);
+      s = await load();
+      expect(drive.files, hasLength(2), reason: 'pre-restore file kept');
+      expect(drive.files.containsKey(before.file.id), isTrue);
+    });
+
+    test('a canceled reconnect keeps the warning', () async {
+      await _seed(db);
+      await sync().connect();
+      drive.failWith = DriveApiException(401, 'Invalid Credentials');
+      await sync().backupNow();
+      expect(container.read(driveSyncProvider).needsReconnect, isTrue);
+
+      auth.connectError = DriveConnectException('x', canceled: true);
+      await expectLater(
+        sync().connect(),
+        throwsA(isA<DriveConnectException>()),
+      );
+      final state = container.read(driveSyncProvider);
+      expect(state.needsReconnect, isTrue);
+      expect(state.lastError, contains('Reconnect'));
     });
 
     test('a revoked grant asks the user to reconnect', () async {

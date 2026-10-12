@@ -79,10 +79,11 @@ class DriveSyncController extends Notifier<DriveSyncState> {
     );
   }
 
-  /// A stable random id for this installation (tags its Drive snapshots).
-  Future<String> _installId() async {
+  /// A random id for this installation (tags its Drive snapshots). A
+  /// [fresh] id starts a new series of files, leaving older ones untouched.
+  Future<String> _installId({bool fresh = false}) async {
     final s = await _load();
-    if (s.installId.length >= 8) return s.installId;
+    if (!fresh && s.installId.length >= 8) return s.installId;
     final rnd = Random.secure();
     final id = List.generate(
       16,
@@ -95,6 +96,7 @@ class DriveSyncController extends Notifier<DriveSyncState> {
   /// Interactive: asks for Drive access, then returns the existing backups
   /// (so the caller can offer a restore). Throws [DriveConnectException].
   Future<List<DriveBackup>> connect() async {
+    final previous = state;
     _set(DrivePhase.connecting);
     try {
       await _auth.connect();
@@ -111,16 +113,29 @@ class DriveSyncController extends Notifier<DriveSyncState> {
       _set(DrivePhase.idle);
       return backups;
     } on DriveConnectException catch (e) {
-      _set(DrivePhase.idle, error: e.canceled ? null : e.message);
+      // A canceled Reconnect leaves the "access expired" warning in place.
+      _set(
+        DrivePhase.idle,
+        error: e.canceled ? previous.lastError : e.message,
+        needsReconnect: previous.needsReconnect,
+      );
       rethrow;
     } on DriveApiException catch (e) {
       final message = _describe(e);
-      _set(DrivePhase.idle, error: message);
+      _set(
+        DrivePhase.idle,
+        error: message,
+        needsReconnect: previous.needsReconnect,
+      );
       throw DriveConnectException(message);
     } catch (e, s) {
       _log.warning('Connect failed', e, s);
       const message = 'Couldn’t reach Google Drive. Check your connection.';
-      _set(DrivePhase.idle, error: message);
+      _set(
+        DrivePhase.idle,
+        error: message,
+        needsReconnect: previous.needsReconnect,
+      );
       throw DriveConnectException(message);
     }
   }
@@ -136,8 +151,23 @@ class DriveSyncController extends Notifier<DriveSyncState> {
         _set(DrivePhase.idle);
         return false;
       }
-      await _service.backupNow(installId: await _installId());
-      await _update((s) => s.copyWith(driveLastBackupAt: DateTime.now));
+      DriveBackup uploaded;
+      try {
+        uploaded = await _service.backupNow(
+          installId: await _installId(),
+          lastUploadAt: settings.driveLastBackupAt,
+        );
+      } on InstallIdConflict {
+        // Someone else owns today's file for this id: start a new series.
+        uploaded = await _service.backupNow(
+          installId: await _installId(fresh: true),
+        );
+      }
+      // Drive's own timestamp, so the next upload can tell whether today's
+      // file is still the one this phone wrote.
+      await _update(
+        (s) => s.copyWith(driveLastBackupAt: () => uploaded.createdAt),
+      );
       _set(DrivePhase.idle);
       return true;
     } on DriveBackupException catch (e) {
@@ -149,6 +179,13 @@ class DriveSyncController extends Notifier<DriveSyncState> {
         DrivePhase.idle,
         error: _describe(e),
         needsReconnect: e.isUnauthorized || e.isForbidden,
+      );
+      return false;
+    } on DriveAuthUnavailableException catch (e) {
+      _log.info('Backup postponed: $e');
+      _set(
+        DrivePhase.idle,
+        error: auto ? null : 'Couldn’t reach Google — will retry.',
       );
       return false;
     } catch (e, s) {
@@ -177,10 +214,14 @@ class DriveSyncController extends Notifier<DriveSyncState> {
     try {
       await _prepare();
       await _service.restore(snapshot);
+      // Continue under a new install id: the next upload starts a new file
+      // instead of overwriting today's pre-restore snapshot, which stays in
+      // Drive as a restore point.
       await _update(
         (s) => s.copyWith(
+          installId: '',
           driveConnected: true,
-          driveLastBackupAt: () => snapshot.createdAt,
+          driveLastBackupAt: () => null,
         ),
       );
       _set(DrivePhase.idle);
@@ -198,6 +239,7 @@ class DriveSyncController extends Notifier<DriveSyncState> {
       _update((s) => s.copyWith(driveAutoBackup: enabled));
 
   Future<void> disconnect() async {
+    await _prepare(); // so the grant of the right account is revoked
     await _auth.disconnect();
     await _update(
       (s) => s.copyWith(
@@ -296,11 +338,21 @@ class DriveAutoBackup {
     try {
       final s = await _ref.read(settingsRepositoryProvider).load();
       if (_disposed || !_enabled(s)) return;
+      if (_ref.read(driveSyncProvider).busy) {
+        // Another backup/restore is running: try again shortly.
+        _schedule(const Duration(seconds: 30));
+        return;
+      }
       final generation = _generation;
       final ok = await _ref
           .read(driveSyncProvider.notifier)
           .backupNow(auto: true);
-      if (ok && generation == _generation) _dirty = false;
+      if (_disposed) return;
+      if (ok && generation == _generation) {
+        _dirty = false;
+      } else if (ok && !(_timer?.isActive ?? false)) {
+        _schedule(debounce); // changes arrived during the upload
+      }
     } catch (e, s) {
       _log.warning('Auto-backup failed', e, s);
     }

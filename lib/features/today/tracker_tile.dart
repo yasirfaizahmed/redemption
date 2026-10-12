@@ -258,7 +258,12 @@ class _QuickAction extends ConsumerWidget {
               backgroundColor: Palette.success.withValues(alpha: 0.14),
               foregroundColor: Palette.success,
             ),
-            onPressed: () => actions.save(tracker, day, BoolValue(win)),
+            onPressed: () => actions.save(
+              tracker,
+              day,
+              BoolValue(win),
+              note: entry?.note ?? '',
+            ),
             icon: Icon(Palette.iconForAnswer(win)),
           );
         }
