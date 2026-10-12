@@ -1055,6 +1055,19 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
             'Success comes from the credit of the picked option (set above).',
             style: theme.textTheme.bodySmall,
           ),
+          _DayRuleEditor(
+            tracker: draft,
+            candidates: [
+              for (final other in ref.watch(activeTrackersProvider))
+                if (other.id != draft.id &&
+                    other.type == TrackerType.singleChoice &&
+                    other.config.options.isNotEmpty)
+                  other,
+            ],
+            onChanged: (rule) => _update(
+              (d) => d.copyWith(config: d.config.copyWith(dayRule: () => rule)),
+            ),
+          ),
         ];
       case TrackerType.time:
         return [
@@ -1231,3 +1244,150 @@ Day trackerStartDay({
   required Day journeyStart,
   required bool fromStart,
 }) => fromStart || today.isBefore(journeyStart) ? journeyStart : today;
+
+/// "Different on certain days": when another choice tracker has a given
+/// answer, give some options full marks, hide some from the one-tap row and
+/// show a note (e.g. office days without a masjid).
+class _DayRuleEditor extends StatelessWidget {
+  const _DayRuleEditor({
+    required this.tracker,
+    required this.candidates,
+    required this.onChanged,
+  });
+
+  final Tracker tracker;
+  final List<Tracker> candidates;
+  final ValueChanged<DayRule?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final rule = tracker.config.dayRule;
+    if (candidates.isEmpty && rule == null) return const SizedBox.shrink();
+    final when = candidates
+        .where((c) => c.id == rule?.whenTrackerId)
+        .firstOrNull;
+    final options = tracker.config.options;
+
+    Widget chips({
+      required bool Function(ChoiceOption) selected,
+      required void Function(ChoiceOption, bool) onSelected,
+    }) => Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      children: [
+        for (final o in options)
+          FilterChip(
+            label: Text(o.display),
+            selected: selected(o),
+            onSelected: (v) => onSelected(o, v),
+          ),
+      ],
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Different on certain days'),
+          subtitle: const Text(
+            'e.g. on office days with no masjid, praying on time earns '
+            'full marks',
+          ),
+          value: rule != null,
+          onChanged: candidates.isEmpty && rule == null
+              ? null
+              : (v) => onChanged(
+                  v
+                      ? DayRule(
+                          whenTrackerId: candidates.first.id,
+                          whenOptionId:
+                              candidates.first.config.options.first.id,
+                        )
+                      : null,
+                ),
+        ),
+        if (rule != null) ...[
+          DropdownButtonFormField<int>(
+            key: ValueKey('when-${rule.whenTrackerId}'),
+            initialValue: when?.id,
+            decoration: const InputDecoration(labelText: 'When'),
+            hint: const Text('Pick a tracker'),
+            items: [
+              for (final c in candidates)
+                DropdownMenuItem(value: c.id, child: Text(c.name)),
+            ],
+            onChanged: (id) {
+              final c = candidates.firstWhere((c) => c.id == id);
+              onChanged(
+                rule.copyWith(
+                  whenTrackerId: c.id,
+                  whenOptionId: c.config.options.first.id,
+                ),
+              );
+            },
+          ),
+          if (when != null) ...[
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              key: ValueKey('is-${when.id}-${rule.whenOptionId}'),
+              initialValue: when.config.optionById(rule.whenOptionId)?.id,
+              decoration: const InputDecoration(labelText: 'is'),
+              items: [
+                for (final o in when.config.options)
+                  DropdownMenuItem(value: o.id, child: Text(o.display)),
+              ],
+              onChanged: (id) {
+                if (id != null) onChanged(rule.copyWith(whenOptionId: id));
+              },
+            ),
+          ],
+          const SizedBox(height: 16),
+          Text('Full marks on those days', style: theme.textTheme.titleSmall),
+          const SizedBox(height: 6),
+          chips(
+            selected: (o) => (rule.credits[o.id] ?? -1) >= 1,
+            onSelected: (o, v) => onChanged(
+              rule.copyWith(
+                credits: {
+                  for (final e in rule.credits.entries)
+                    if (e.key != o.id) e.key: e.value,
+                  if (v) o.id: 1,
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Hide from the one-tap row on those days',
+            style: theme.textTheme.titleSmall,
+          ),
+          const SizedBox(height: 6),
+          chips(
+            selected: (o) => rule.hideOptionIds.contains(o.id),
+            onSelected: (o, v) => onChanged(
+              rule.copyWith(
+                hideOptionIds: [
+                  for (final id in rule.hideOptionIds)
+                    if (id != o.id) id,
+                  if (v) o.id,
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            initialValue: rule.label,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(
+              labelText: 'Note shown on those days (optional)',
+              hintText: 'Office day — no masjid',
+            ),
+            onChanged: (v) => onChanged(rule.copyWith(label: v.trim())),
+          ),
+        ],
+      ],
+    );
+  }
+}

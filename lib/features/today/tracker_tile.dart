@@ -41,7 +41,14 @@ class TrackerTile extends ConsumerWidget {
       entryIndexProvider.select((i) => i.get(tracker.id, day)),
     );
     final scoring = ref.watch(scoringProvider);
-    final status = scoring.status(tracker, entry, day, today);
+    // The entry a day rule depends on (e.g. "WFH or office?"), if any.
+    final ruleId = tracker.config.dayRule?.whenTrackerId ?? 0;
+    final ruleEntry = ruleId == 0
+        ? null
+        : ref.watch(entryIndexProvider.select((i) => i.get(ruleId, day)));
+    final sameDay = {ruleId: ?ruleEntry};
+    final rule = tracker.ruleOn(sameDay);
+    final status = scoring.status(tracker, entry, day, today, sameDay: sameDay);
     final statusColor = Palette.forStatus(status, scheme);
     final logged = entry != null && !entry.value.isEmpty;
 
@@ -148,10 +155,36 @@ class TrackerTile extends ConsumerWidget {
                               ),
                             ],
                           ),
+                          if (rule != null && rule.label.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8, left: 56),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    Icons.business_center_outlined,
+                                    size: 16,
+                                    color: scheme.primary,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      rule.label,
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(color: scheme.primary),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           if (!logged && _showInlineChoices)
                             Padding(
                               padding: const EdgeInsets.only(top: 10, left: 56),
-                              child: _InlineChoices(tracker: tracker, day: day),
+                              child: _InlineChoices(
+                                tracker: tracker,
+                                day: day,
+                                hidden: rule?.hideOptionIds ?? const [],
+                              ),
                             ),
                         ],
                       ),
@@ -321,19 +354,30 @@ class _QuickAction extends ConsumerWidget {
 
 /// Compact one-tap option buttons (e.g. prayer quality) shown while pending.
 class _InlineChoices extends ConsumerWidget {
-  const _InlineChoices({required this.tracker, required this.day});
+  const _InlineChoices({
+    required this.tracker,
+    required this.day,
+    this.hidden = const [],
+  });
 
   final Tracker tracker;
   final Day day;
 
+  /// Options a [DayRule] leaves out today (e.g. congregation on office days).
+  final List<String> hidden;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final options = [
+      for (final o in tracker.config.options)
+        if (!hidden.contains(o.id)) o,
+    ];
     return Wrap(
       spacing: 6,
       runSpacing: 6,
       children: [
-        for (final o in tracker.config.options)
+        for (final o in options)
           Tooltip(
             message: o.label,
             child: Semantics(
@@ -360,12 +404,9 @@ class _InlineChoices extends ConsumerWidget {
                   ),
                   child: Text(
                     o.emoji.isNotEmpty
-                        ? (tracker.config.options.length <= 3
-                              ? o.display
-                              : o.emoji)
+                        ? (options.length <= 3 ? o.display : o.emoji)
                         : o.label,
-                    style:
-                        o.emoji.isNotEmpty && tracker.config.options.length > 3
+                    style: o.emoji.isNotEmpty && options.length > 3
                         ? const TextStyle(fontSize: 18)
                         : theme.textTheme.labelLarge,
                   ),

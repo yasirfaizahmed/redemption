@@ -277,6 +277,7 @@ class BackupService {
               ..orderBy([(e) => OrderingTerm.asc(e.day)]))
             .get();
     final scoring = Scoring(dayStartMinutes: dayStartMinutes);
+    final byDay = EntryIndex([for (final r in entryRows) r.toDomain()]);
     final buf = StringBuffer()
       ..writeln(
         'date,day_number,tracker,section,type,value,raw,progress,goal_met,note',
@@ -285,7 +286,11 @@ class BackupService {
       final e = row.toDomain();
       final t = trackers[e.trackerId];
       if (t == null) continue;
-      final progress = scoring.progress(t, e.value);
+      final progress = scoring.progress(
+        t,
+        e.value,
+        sameDay: byDay.forDay(e.day),
+      );
       final raw = scoring.numericValue(t, e.value);
       buf.writeln(
         [

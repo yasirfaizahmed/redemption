@@ -152,7 +152,7 @@ class TrackerStats {
       for (final d in Day.range(journey.startDay, last)) {
         if (!tracker.isExpectedOn(d)) continue;
         final e = entries[d];
-        final p = scoring.progress(tracker, e?.value);
+        final p = scoring.progress(tracker, e?.value, sameDay: index.forDay(d));
         final complete = Scoring.isComplete(p);
         if (d == today && !complete) continue; // today still in progress
         expected++;
@@ -269,7 +269,7 @@ List<SeriesPoint> buildSeries({
         final n = tracker.type.isChartable
             ? scoring.numericValue(tracker, e.value)
             : null;
-        final p = scoring.progress(tracker, e.value);
+        final p = scoring.progress(tracker, e.value, sameDay: index.forDay(d));
         return SeriesPoint(d, n ?? p * 100, p);
       }(),
   ];

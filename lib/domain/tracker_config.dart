@@ -56,6 +56,99 @@ class ChoiceOption {
   int get hashCode => Object.hash(id, label, emoji, score);
 }
 
+/// Changes a choice tracker on days when another choice tracker has a given
+/// answer — e.g. on office days (no masjid) the congregation button is
+/// hidden from the one-tap row and "On time" earns full marks.
+@immutable
+class DayRule {
+  const DayRule({
+    this.whenTrackerId = 0,
+    this.whenRef = '',
+    required this.whenOptionId,
+    this.label = '',
+    this.hideOptionIds = const [],
+    this.credits = const {},
+  });
+
+  factory DayRule.fromJson(Map<String, dynamic> json) => DayRule(
+    whenTrackerId: (json['when'] as num?)?.toInt() ?? 0,
+    whenOptionId: json['is'] as String? ?? '',
+    label: json['label'] as String? ?? '',
+    hideOptionIds: [
+      for (final id in json['hide'] as List<dynamic>? ?? const []) '$id',
+    ],
+    credits: {
+      for (final e
+          in (json['credits'] as Map<String, dynamic>? ?? const {}).entries)
+        e.key: (e.value as num).toDouble().clamp(0, 1).toDouble(),
+    },
+  );
+
+  /// The tracker whose answer switches the rule on (0 until resolved).
+  final int whenTrackerId;
+
+  /// In templates: the template ref of that tracker, resolved to
+  /// [whenTrackerId] when a journey is created. Never stored.
+  final String whenRef;
+
+  /// The answer of that tracker that switches the rule on.
+  final String whenOptionId;
+
+  /// Shown on the tracker on those days, e.g. "Office day — no masjid".
+  final String label;
+
+  /// Options left out of the one-tap row (still available in the sheet).
+  final List<String> hideOptionIds;
+
+  /// Option id → credit (0–1) on those days, instead of the option's own.
+  final Map<String, double> credits;
+
+  bool get isResolved => whenTrackerId > 0;
+
+  // [whenRef] is a template-time detail and not part of a rule's identity.
+
+  DayRule copyWith({
+    int? whenTrackerId,
+    String? whenOptionId,
+    String? label,
+    List<String>? hideOptionIds,
+    Map<String, double>? credits,
+  }) => DayRule(
+    whenTrackerId: whenTrackerId ?? this.whenTrackerId,
+    whenRef: whenRef,
+    whenOptionId: whenOptionId ?? this.whenOptionId,
+    label: label ?? this.label,
+    hideOptionIds: hideOptionIds ?? this.hideOptionIds,
+    credits: credits ?? this.credits,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'when': whenTrackerId,
+    'is': whenOptionId,
+    if (label.isNotEmpty) 'label': label,
+    if (hideOptionIds.isNotEmpty) 'hide': hideOptionIds,
+    if (credits.isNotEmpty) 'credits': credits,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is DayRule &&
+      other.whenTrackerId == whenTrackerId &&
+      other.whenOptionId == whenOptionId &&
+      other.label == label &&
+      const ListEquality<String>().equals(other.hideOptionIds, hideOptionIds) &&
+      const MapEquality<String, double>().equals(other.credits, credits);
+
+  @override
+  int get hashCode => Object.hash(
+    whenTrackerId,
+    whenOptionId,
+    label,
+    const ListEquality<String>().hash(hideOptionIds),
+    const MapEquality<String, double>().hash(credits),
+  );
+}
+
 enum NumberInputStyle { stepper, slider }
 
 enum RatingStyle { stars, emoji, scale }
@@ -81,6 +174,7 @@ class TrackerConfig {
     this.yesLabel = 'Yes',
     this.noLabel = 'No',
     this.maxAttachments = 4,
+    this.dayRule,
   });
 
   factory TrackerConfig.fromJson(Map<String, dynamic> json) => TrackerConfig(
@@ -112,6 +206,9 @@ class TrackerConfig {
     yesLabel: json['yesLabel'] as String? ?? 'Yes',
     noLabel: json['noLabel'] as String? ?? 'No',
     maxAttachments: json['maxAttachments'] as int? ?? 4,
+    dayRule: json['dayRule'] is Map<String, dynamic>
+        ? DayRule.fromJson(json['dayRule'] as Map<String, dynamic>)
+        : null,
   );
 
   /// Unit suffix for numeric types (kg, km, glasses…).
@@ -142,6 +239,9 @@ class TrackerConfig {
 
   final int maxAttachments;
 
+  /// Choice trackers: how they change on certain days (see [DayRule]).
+  final DayRule? dayRule;
+
   ChoiceOption? optionById(String id) =>
       options.firstWhereOrNull((o) => o.id == id);
 
@@ -162,6 +262,7 @@ class TrackerConfig {
     String? yesLabel,
     String? noLabel,
     int? maxAttachments,
+    DayRule? Function()? dayRule,
   }) => TrackerConfig(
     unit: unit ?? this.unit,
     min: min != null ? min() : this.min,
@@ -179,6 +280,7 @@ class TrackerConfig {
     yesLabel: yesLabel ?? this.yesLabel,
     noLabel: noLabel ?? this.noLabel,
     maxAttachments: maxAttachments ?? this.maxAttachments,
+    dayRule: dayRule != null ? dayRule() : this.dayRule,
   );
 
   Map<String, dynamic> toJson() => {
@@ -198,6 +300,7 @@ class TrackerConfig {
     'yesLabel': yesLabel,
     'noLabel': noLabel,
     'maxAttachments': maxAttachments,
+    if (dayRule case final rule? when rule.isResolved) 'dayRule': rule.toJson(),
   };
 
   @override

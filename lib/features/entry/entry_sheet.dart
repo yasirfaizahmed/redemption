@@ -184,10 +184,19 @@ class _EntrySheetState extends ConsumerState<EntrySheet> {
                 text: 'Not scheduled on this day — logging is optional.',
               ),
             ],
+            if (tracker.ruleOn(index.forDay(widget.day)) case final rule?
+                when rule.label.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _Banner(icon: Icons.business_center_outlined, text: rule.label),
+            ],
             const SizedBox(height: 16),
             _GoalHint(
               tracker: tracker,
-              progress: scoring.progress(tracker, _draft),
+              progress: scoring.progress(
+                tracker,
+                _draft,
+                sameDay: index.forDay(widget.day),
+              ),
               hasValue: _draft != null && !_draft!.isEmpty,
               use24h: settings.use24h,
             ),

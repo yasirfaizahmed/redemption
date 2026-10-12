@@ -35,8 +35,13 @@ class Scoring {
 
   static bool isComplete(double progress) => progress >= 1 - _epsilon;
 
-  /// Credit (0–1) earned by [value] against [tracker]'s goal.
-  double progress(Tracker tracker, TrackerValue? value) {
+  /// Credit (0–1) earned by [value] against [tracker]'s goal. [sameDay]
+  /// holds the other entries of that day, for trackers with a [DayRule].
+  double progress(
+    Tracker tracker,
+    TrackerValue? value, {
+    Map<int, Entry> sameDay = const {},
+  }) {
     if (value == null || value.isEmpty) return 0;
     final goal = tracker.goal;
     switch (goal) {
@@ -47,6 +52,8 @@ class Scoring {
         return value.value == target ? 1 : 0;
       case ChoiceScoreGoal():
         if (value is! ChoiceValue) return 1;
+        final override = tracker.ruleOn(sameDay)?.credits[value.optionId];
+        if (override != null) return override.clamp(0, 1).toDouble();
         final option = tracker.config.optionById(value.optionId);
         return (option?.score ?? 0).clamp(0, 1).toDouble();
       case NumberGoal(:final comparator, value: final target, :final upper):
@@ -89,13 +96,19 @@ class Scoring {
     ChoiceValue() || TextValue() => null,
   };
 
-  EntryStatus status(Tracker tracker, Entry? entry, Day day, Day today) {
+  EntryStatus status(
+    Tracker tracker,
+    Entry? entry,
+    Day day,
+    Day today, {
+    Map<int, Entry> sameDay = const {},
+  }) {
     final logged = entry != null && !entry.value.isEmpty;
     if (!tracker.isExpectedOn(day) && !logged) return EntryStatus.notExpected;
     if (!logged) {
       return day.isBefore(today) ? EntryStatus.missed : EntryStatus.pending;
     }
-    final p = progress(tracker, entry.value);
+    final p = progress(tracker, entry.value, sameDay: sameDay);
     if (isComplete(p)) return EntryStatus.done;
     if (p > 0) return EntryStatus.partial;
     return EntryStatus.failed;
@@ -114,7 +127,7 @@ class Scoring {
       final e = entries[t.id];
       if (e == null || e.value.isEmpty) continue;
       logged++;
-      final p = progress(t, e.value);
+      final p = progress(t, e.value, sameDay: entries);
       earned += p;
       if (isComplete(p)) done++;
     }

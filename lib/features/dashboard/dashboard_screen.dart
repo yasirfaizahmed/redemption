@@ -8,6 +8,7 @@ import '../../domain/dashboard.dart';
 import '../../state/providers.dart';
 import '../settings/app_update_ui.dart';
 import 'widgets/dashboard_cards.dart';
+import 'widgets/journey_upgrade_card.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -82,6 +83,7 @@ class DashboardScreen extends ConsumerWidget {
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
               children: [
                 const UpdateBanner(),
+                const JourneyUpgradeCard(),
                 for (final row in layoutRows(items))
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),

@@ -55,9 +55,13 @@ class EntryActions {
           updatedAt: DateTime.now(),
         ),
     ];
-    final after = scoring.summarize(day, trackers, EntryIndex(next));
+    final nextIndex = EntryIndex(next);
+    final after = scoring.summarize(day, trackers, nextIndex);
     final completedTracker =
-        !isEmpty && Scoring.isComplete(scoring.progress(tracker, value));
+        !isEmpty &&
+        Scoring.isComplete(
+          scoring.progress(tracker, value, sameDay: nextIndex.forDay(day)),
+        );
     final perfectNow = !before.isPerfect && after.isPerfect;
 
     if (settings.haptics) {

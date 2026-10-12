@@ -90,16 +90,47 @@ const prayerOptions = <ChoiceOption>[
   ChoiceOption(id: 'missed', label: 'Missed', emoji: '❌', score: 0),
 ];
 
-Tracker _prayer(String name, String icon, int at, String section) => _t(
+Tracker _prayer(
+  String name,
+  String icon,
+  int at,
+  String section, {
+  DayRule? rule,
+}) => _t(
   name: name,
   type: TrackerType.singleChoice,
   icon: icon,
   color: 0xFF10B981,
   section: section,
   at: at,
-  config: const TrackerConfig(options: prayerOptions),
+  config: TrackerConfig(options: prayerOptions, dayRule: rule),
   goal: const ChoiceScoreGoal(),
 );
+
+/// No masjid at the office: on office days congregation isn't offered as a
+/// one-tap option and praying on time earns full marks.
+DayRule officeDayRule({String whenRef = 'workmode', int whenTrackerId = 0}) =>
+    DayRule(
+      whenRef: whenRef,
+      whenTrackerId: whenTrackerId,
+      whenOptionId: 'office',
+      label: 'Office day — no masjid: praying on time earns full marks',
+      hideOptionIds: const ['jamaah'],
+      credits: const {'ontime': 1},
+    );
+
+/// "Had it on time?" for a meal; counts towards the daily score.
+Tracker mealOnTime(String meal, {required String section, required int at}) =>
+    _t(
+      name: '$meal on time?',
+      type: TrackerType.checkbox,
+      icon: 'clock',
+      color: 0xFFF97316,
+      section: section,
+      at: at,
+      config: const TrackerConfig(yesLabel: 'On time', noLabel: 'Late'),
+      goal: const BoolGoal(),
+    );
 
 abstract final class Templates {
   static final redemption = JourneyTemplate(
@@ -145,6 +176,10 @@ abstract final class Templates {
         ),
       ),
       TemplateTracker(
+        'breakfast_ontime',
+        mealOnTime('Breakfast', section: 'Morning', at: _hm(7, 30)),
+      ),
+      TemplateTracker(
         'workmode',
         _t(
           name: 'WFH or office?',
@@ -164,7 +199,10 @@ abstract final class Templates {
           goal: const ChoiceScoreGoal(),
         ),
       ),
-      TemplateTracker('dhuhr', _prayer('Dhuhr', 'sunny', _hm(13, 15), 'Day')),
+      TemplateTracker(
+        'dhuhr',
+        _prayer('Dhuhr', 'sunny', _hm(13, 15), 'Day', rule: officeDayRule()),
+      ),
       TemplateTracker(
         'lunch',
         _t(
@@ -178,6 +216,10 @@ abstract final class Templates {
         ),
       ),
       TemplateTracker(
+        'lunch_ontime',
+        mealOnTime('Lunch', section: 'Day', at: _hm(13, 45)),
+      ),
+      TemplateTracker(
         'leftoffice',
         _t(
           name: 'Left office',
@@ -189,7 +231,10 @@ abstract final class Templates {
           weekdays: Weekdays.workweek,
         ),
       ),
-      TemplateTracker('asr', _prayer('Asr', 'sun_low', _hm(16, 45), 'Day')),
+      TemplateTracker(
+        'asr',
+        _prayer('Asr', 'sun_low', _hm(16, 45), 'Day', rule: officeDayRule()),
+      ),
       TemplateTracker(
         'preworkout',
         _t(
@@ -205,7 +250,13 @@ abstract final class Templates {
       ),
       TemplateTracker(
         'maghrib',
-        _prayer('Maghrib', 'sunset', _hm(18, 30), 'Evening'),
+        _prayer(
+          'Maghrib',
+          'sunset',
+          _hm(18, 30),
+          'Evening',
+          rule: officeDayRule(),
+        ),
       ),
       TemplateTracker(
         'workout',
@@ -233,6 +284,10 @@ abstract final class Templates {
           at: _hm(20, 15),
           config: const TrackerConfig(placeholder: 'Chicken, rice, salad…'),
         ),
+      ),
+      TemplateTracker(
+        'dinner_ontime',
+        mealOnTime('Dinner', section: 'Evening', at: _hm(20, 15)),
       ),
       TemplateTracker('isha', _prayer('Isha', 'moon', _hm(20, 45), 'Night')),
       TemplateTracker(

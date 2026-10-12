@@ -4,6 +4,7 @@ import 'package:logging/logging.dart';
 import '../../core/time/day.dart';
 import '../../domain/models.dart';
 import '../../domain/templates.dart';
+import '../../domain/tracker_config.dart';
 import '../db/database.dart';
 import 'mappers.dart';
 
@@ -83,6 +84,13 @@ class JourneyRepository {
           .into(_db.trackers)
           .insert(tracker.toCompanion());
     }
+    // Day rules reference other trackers by template ref: resolve them now.
+    for (final tt in template.trackers) {
+      final rule = tt.tracker.config.dayRule;
+      final whenId = refToId[rule?.whenRef];
+      if (rule == null || whenId == null) continue;
+      await _setDayRule(refToId[tt.ref]!, rule.copyWith(whenTrackerId: whenId));
+    }
     for (final (i, w) in template.widgets.indexed) {
       final ids = [
         for (final r in w.refs)
@@ -106,6 +114,19 @@ class JourneyRepository {
     );
     return journeyId;
   });
+
+  Future<void> _setDayRule(int trackerId, DayRule? rule) async {
+    final row = await (_db.select(
+      _db.trackers,
+    )..where((t) => t.id.equals(trackerId))).getSingle();
+    await (_db.update(
+      _db.trackers,
+    )..where((t) => t.id.equals(trackerId))).write(
+      TrackersCompanion(
+        config: Value(row.config.copyWith(dayRule: () => rule)),
+      ),
+    );
+  }
 
   /// Starts a fresh journey, optionally copying trackers and dashboard layout
   /// from [copyFrom]. History of the old journey is kept untouched.
@@ -134,6 +155,16 @@ class JourneyRepository {
         activeFrom: startDay,
       );
       idMap[row.id] = await _db.into(_db.trackers).insert(t.toCompanion());
+    }
+    // Point copied day rules at the copies of the trackers they watch.
+    for (final row in trackers) {
+      final rule = row.toDomain().config.dayRule;
+      if (rule == null) continue;
+      final whenId = idMap[rule.whenTrackerId];
+      await _setDayRule(
+        idMap[row.id]!,
+        whenId == null ? null : rule.copyWith(whenTrackerId: whenId),
+      );
     }
     final items = await (_db.select(
       _db.dashboardItems,

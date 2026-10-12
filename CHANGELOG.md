@@ -14,6 +14,17 @@ the GitHub release, and the app shows it under “What’s new” before updatin
   hidden folder in your own Drive. Reinstalled? Tap *Restore from Google Drive*
   on the welcome screen. Needs a one-time Google Cloud setup
   (see `docs/google-drive-setup.md`).
+- **Office days (Redemption template).** When *WFH or office?* is *Office*, Dhuhr,
+  Asr and Maghrib show “Office day — no masjid”, the congregation button steps
+  aside from the one-tap row and praying on time earns full marks. Any choice
+  tracker can now be *different on certain days* (tracker editor → Goal).
+- **Meals on time.** “Breakfast / Lunch / Dinner on time?” checks that count
+  towards the daily score. Existing journeys get a one-tap offer on the
+  dashboard to add both improvements (from today — past days keep their score).
+- **Import data from any version.** *Import a backup file* on the welcome screen
+  (or *Settings → Import data*) takes over a ZIP/JSON backup made by any
+  version, including v1.0.0 — or simply install this update over v1.0.0: all
+  data is kept.
 - **Yes/No trackers show the win.** When “Skipped” is the win (quitting a habit),
   the one-tap button logs “Skipped” and shows a green ✗; when “Done” is the win
   it's a green ✓. Red only when the answer isn't the win.

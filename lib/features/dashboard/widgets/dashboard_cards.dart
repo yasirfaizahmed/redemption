@@ -442,7 +442,13 @@ class TodayStripCard extends ConsumerWidget {
     final done = trackers
         .where(
           (t) =>
-              scoring.status(t, index.get(t.id, today), today, today) ==
+              scoring.status(
+                t,
+                index.get(t.id, today),
+                today,
+                today,
+                sameDay: index.forDay(today),
+              ) ==
               EntryStatus.done,
         )
         .length;
@@ -461,7 +467,13 @@ class TodayStripCard extends ConsumerWidget {
               child: _StripItem(
                 tracker: t,
                 entry: index.get(t.id, today),
-                status: scoring.status(t, index.get(t.id, today), today, today),
+                status: scoring.status(
+                  t,
+                  index.get(t.id, today),
+                  today,
+                  today,
+                  sameDay: index.forDay(today),
+                ),
                 onTap: () =>
                     showEntrySheet(context, trackerId: t.id, day: today),
               ),

@@ -36,6 +36,7 @@ class AppSettings {
     this.updateLastCheckAt,
     this.updateSkippedVersion = '',
     this.updateNotifiedVersion = '',
+    this.dismissedUpgrades = const {},
   });
 
   factory AppSettings.fromMap(Map<String, String> m) {
@@ -74,6 +75,10 @@ class AppSettings {
       updateSkippedVersion: m['updateSkippedVersion'] ?? d.updateSkippedVersion,
       updateNotifiedVersion:
           m['updateNotifiedVersion'] ?? d.updateNotifiedVersion,
+      dismissedUpgrades: {
+        for (final id in (m['dismissedUpgrades'] ?? '').split(','))
+          if (id.isNotEmpty) id,
+      },
     );
   }
 
@@ -137,6 +142,9 @@ class AppSettings {
   /// The last version a notification was shown for (one per version).
   final String updateNotifiedVersion;
 
+  /// Journey improvements the user applied or declined (ids).
+  final Set<String> dismissedUpgrades;
+
   Map<String, String> toMap() => {
     'themeMode': themeMode.name,
     'seedColor': '$seedColor',
@@ -161,6 +169,7 @@ class AppSettings {
     'updateLastCheckAt': updateLastCheckAt?.toUtc().toIso8601String() ?? '',
     'updateSkippedVersion': updateSkippedVersion,
     'updateNotifiedVersion': updateNotifiedVersion,
+    'dismissedUpgrades': (dismissedUpgrades.toList()..sort()).join(','),
   };
 
   AppSettings copyWith({
@@ -187,6 +196,7 @@ class AppSettings {
     DateTime? Function()? updateLastCheckAt,
     String? updateSkippedVersion,
     String? updateNotifiedVersion,
+    Set<String>? dismissedUpgrades,
   }) => AppSettings(
     themeMode: themeMode ?? this.themeMode,
     seedColor: seedColor ?? this.seedColor,
@@ -215,5 +225,6 @@ class AppSettings {
         : this.updateLastCheckAt,
     updateSkippedVersion: updateSkippedVersion ?? this.updateSkippedVersion,
     updateNotifiedVersion: updateNotifiedVersion ?? this.updateNotifiedVersion,
+    dismissedUpgrades: dismissedUpgrades ?? this.dismissedUpgrades,
   );
 }

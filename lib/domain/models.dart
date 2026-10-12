@@ -147,6 +147,15 @@ class Tracker {
   /// Label of the winning answer, e.g. "Done" or "Skipped".
   String get winLabel => winAnswer ? config.yesLabel : config.noLabel;
 
+  /// The [DayRule] in force on a day, given all entries of that day (e.g.
+  /// "office day" when the work-mode tracker says Office).
+  DayRule? ruleOn(Map<int, Entry> sameDay) {
+    final rule = config.dayRule;
+    if (rule == null || !rule.isResolved) return null;
+    final v = sameDay[rule.whenTrackerId]?.value;
+    return v is ChoiceValue && v.optionId == rule.whenOptionId ? rule : null;
+  }
+
   bool isScheduledOn(Day day) => Weekdays.has(weekdays, day.weekday);
 
   bool isActiveOn(Day day) =>

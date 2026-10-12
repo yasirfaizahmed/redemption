@@ -88,7 +88,13 @@ class _DayDetail extends ConsumerWidget {
         for (final t in trackers)
           () {
             final entry = index.get(t.id, day);
-            final status = scoring.status(t, entry, day, today);
+            final status = scoring.status(
+              t,
+              entry,
+              day,
+              today,
+              sameDay: index.forDay(day),
+            );
             return ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 4),
               leading: TrackerAvatar(

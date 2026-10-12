@@ -55,7 +55,7 @@ class JourneyGrid extends ConsumerWidget {
         if (!tracker.isExpectedOn(d)) return null;
         final e = index.get(tracker.id, d);
         if (e == null && d == today) return null;
-        return scoring.progress(tracker, e?.value);
+        return scoring.progress(tracker, e?.value, sameDay: index.forDay(d));
       }
       final s = stats?.summaryByDay[d];
       if (s == null || s.isRestDay) return null;
