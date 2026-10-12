@@ -165,6 +165,32 @@ void main() {
         expect(t.isRequired, isTrue);
       }
       expect(JourneyUpgrade.plan(trackers).isEmpty, isTrue);
+      // Removing one of the additions doesn't bring the offer back.
+      await TrackerRepository(db)
+          .delete(trackers.firstWhere((t) => t.name == 'Dinner on time?').id);
+      expect(
+        JourneyUpgrade.plan(
+          await TrackerRepository(db).forJourney(trackers.first.journeyId),
+        ).isEmpty,
+        isTrue,
+      );
+    });
+
+    test('one “Dinner on time?” even with two dinner trackers', () {
+      Tracker meal(int id, String name) => Tracker(
+        id: id,
+        journeyId: 1,
+        name: name,
+        type: TrackerType.longText,
+        icon: 'dinner',
+        color: 0,
+        activeFrom: day,
+      );
+      final plan = JourneyUpgrade.plan([
+        meal(1, 'Post-workout dinner'),
+        meal(2, 'Dinner'),
+      ]);
+      expect(plan.meals.map((m) => m.$2), ['Dinner']);
     });
 
     test('copying a journey points rules at the copied tracker', () async {

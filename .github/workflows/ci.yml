@@ -139,25 +139,29 @@ jobs:
             NAME="$PUB_VERSION"
           fi
           LABEL="${TAG:-build-${{ github.run_number }}}"
+          # One versionCode for every APK, above everything v1.0.0 shipped
+          # (its per-ABI APKs were 1007/2007): any APK installs over any older one.
+          CODE=$((10000 + ${{ github.run_number }}))
           {
             echo "name=$NAME"
+            echo "code=$CODE"
             echo "tag=$TAG"
             echo "label=$LABEL"
             echo "release=$RELEASE"
           } >> "$GITHUB_OUTPUT"
-          echo "Building version $NAME (code ${{ github.run_number }}) as $LABEL; release=$RELEASE"
+          echo "Building version $NAME (code $CODE) as $LABEL; release=$RELEASE"
 
       - name: Build release APK (universal, installable on any phone)
         run: >
           flutter build apk --release
           --build-name=${{ steps.version.outputs.name }}
-          --build-number=${{ github.run_number }}
+          --build-number=${{ steps.version.outputs.code }}
 
       - name: Build per-ABI APKs (smaller downloads)
         run: >
           flutter build apk --release --split-per-abi
           --build-name=${{ steps.version.outputs.name }}
-          --build-number=${{ github.run_number }}
+          --build-number=${{ steps.version.outputs.code }}
 
       - name: Build app bundle (for Google Play)
         if: steps.version.outputs.release == 'true'
@@ -166,7 +170,7 @@ jobs:
         run: >
           flutter build appbundle --release
           --build-name=${{ steps.version.outputs.name }}
-          --build-number=${{ github.run_number }}
+          --build-number=${{ steps.version.outputs.code }}
 
       - name: Collect artifacts
         env:
@@ -181,6 +185,15 @@ jobs:
             cp "$out/bundle/release/app-release.aab" "dist/redemption-$LABEL.aab"
           fi
           (cd dist && sha256sum * > SHA256SUMS.txt)
+          # Every APK must carry the same versionCode, or switching between
+          # the universal and per-ABI APKs would be refused as a downgrade.
+          AAPT="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)aapt2"
+          codes=$(for f in dist/*.apk; do "$AAPT" dump badging "$f" | grep -o "versionCode='[0-9]*'"; done | sort -u)
+          echo "APK version codes: $codes"
+          if [ "$(echo "$codes" | wc -l)" -ne 1 ] || [ "$codes" != "versionCode='${{ steps.version.outputs.code }}'" ]; then
+            echo "::error::APKs disagree on versionCode: $codes"
+            exit 1
+          fi
           ls -lh dist
           cat dist/SHA256SUMS.txt
 

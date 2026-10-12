@@ -132,6 +132,8 @@ void main() {
     final again = await backup.importBytes(await backup.buildZipBytes());
     expect(again.entries, 33);
     expect(again.attachments, 2);
+    expect(Directory('${dir.path}.importing').existsSync(), isFalse);
+    expect(Directory('${dir.path}.old').existsSync(), isFalse);
   });
 
   test('the bare backup.json of a v1.0.0 ZIP imports too', () async {
@@ -167,5 +169,10 @@ void main() {
         .watchForJourney((await JourneyRepository(db).active())!.id)
         .first;
     expect(entries, hasLength(32), reason: 'failed imports change nothing');
+    expect(
+      File('${dir.path}/img_day0.png').existsSync(),
+      isTrue,
+      reason: 'photos survive a failed import',
+    );
   });
 }

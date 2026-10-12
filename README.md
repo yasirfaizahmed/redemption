@@ -124,7 +124,8 @@ next start.
 Both paths run the full CI (tests → APKs + Play `.aab`) and publish a GitHub Release with
 the APKs, the bundle and `SHA256SUMS.txt`. Releasing a version whose tag already exists is
 refused, so a release is never overwritten by accident. `versionName` comes from the tag and `versionCode`
-from the CI run number, so every build upgrades the previous one.
+is `10000 + CI run number` for **every** APK (universal and per-ABI alike — see
+`android/gradle.properties`), so any build installs over any older one.
 
 > Builds are signed with a shared **dev** key committed to the repo, so every new APK
 > installs over the previous one and keeps your data. For a Play Store release, add your own

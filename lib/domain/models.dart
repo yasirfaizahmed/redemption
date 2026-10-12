@@ -156,6 +156,17 @@ class Tracker {
     return v is ChoiceValue && v.optionId == rule.whenOptionId ? rule : null;
   }
 
+  /// This tracker as it scores under [rule]: option credits replaced by the
+  /// rule's (ids unchanged), for showing what each option is worth today.
+  Tracker withRuleCredits(DayRule rule) => copyWith(
+    config: config.copyWith(
+      options: [
+        for (final o in config.options)
+          o.copyWith(score: rule.credits[o.id] ?? o.score),
+      ],
+    ),
+  );
+
   bool isScheduledOn(Day day) => Weekdays.has(weekdays, day.weekday);
 
   bool isActiveOn(Day day) =>

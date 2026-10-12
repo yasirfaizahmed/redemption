@@ -5,10 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:redemption/domain/templates.dart';
 import 'package:redemption/features/settings/settings_screen.dart';
+import 'package:redemption/services/notification_service.dart';
 import 'package:redemption/services/update/apk_installer.dart';
 import 'package:redemption/services/update/app_version.dart';
 import 'package:redemption/services/update/github_releases.dart';
 import 'package:redemption/state/app_update.dart';
+import 'package:redemption/state/providers.dart';
 
 import '../support/fake_github.dart';
 import '../support/harness.dart';
@@ -99,5 +101,29 @@ void main() {
 
     expect(find.text('You’re on the latest version (v1.1.0).'), findsOneWidget);
     expect(installer.installed, isEmpty);
+  });
+
+  testWidgets('tapping the update notification on a cold start opens the '
+      'update sheet once the app is ready', (tester) async {
+    usePhoneSurface(tester);
+    final env = await createEnv(tester, template: Templates.redemption);
+    addTearDown(() => disposeEnv(tester, env));
+    final gh = FakeGitHub();
+
+    await tester.pumpWidget(
+      buildApp(
+        env,
+        overrides: [
+          ...overridesFor(gh, _Installer()),
+          notificationServiceProvider.overrideWithValue(
+            NotificationService()..launchPayload = 'update',
+          ),
+        ],
+      ),
+    );
+    await settle(tester, rounds: 20);
+
+    expect(find.text('Redemption v9.9.0'), findsOneWidget);
+    expect(find.text('Download & install'), findsOneWidget);
   });
 }

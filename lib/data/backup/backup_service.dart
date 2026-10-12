@@ -160,25 +160,23 @@ class BackupService {
     } else {
       snapshot = _decode(bytes);
     }
+    // Unpack photos next to the attachment folder *before* touching the
+    // database: if that fails (e.g. the phone is full), nothing changed.
+    final staging = await _stageAttachments(attachments);
     try {
       await restoreSnapshot(snapshot);
     } on BackupException {
+      await _discard(staging);
       rethrow;
     } catch (e, st) {
       // The restore runs in one transaction, so nothing was changed.
+      await _discard(staging);
       _log.warning('Backup rows could not be imported', e, st);
       throw BackupException(
         'This backup could not be read, so nothing was changed. ($e)',
       );
     }
-    await _attachments.clear();
-    var written = 0;
-    for (final e in attachments.entries) {
-      final safe = p.normalize(e.key);
-      if (safe.startsWith('..') || p.isAbsolute(safe)) continue; // zip-slip
-      await _attachments.writeBytes(safe, e.value);
-      written++;
-    }
+    final written = await _swapInAttachments(staging);
     int count(String key) =>
         (snapshot[key] as List<dynamic>? ?? const []).length;
     final summary = ImportSummary(
@@ -186,14 +184,72 @@ class BackupService {
       trackers: count('trackers'),
       entries: count('entries'),
       attachments: written,
-      exportedAt: DateTime.tryParse(snapshot['exportedAt'] as String? ?? '')
-          ?.toLocal(),
+      exportedAt: snapshot['exportedAt'] is String
+          ? DateTime.tryParse(snapshot['exportedAt'] as String)?.toLocal()
+          : null,
     );
     _log.info(
       'Imported backup v${snapshot['version']} '
       '(schema ${snapshot['schemaVersion']}): ${summary.describe()}',
     );
     return summary;
+  }
+
+  Directory get _stagingDir => Directory('${_attachments.root.path}.importing');
+
+  Future<Directory> _stageAttachments(Map<String, List<int>> files) async {
+    final staging = _stagingDir;
+    await _discard(staging);
+    try {
+      await staging.create(recursive: true);
+      for (final e in files.entries) {
+        final safe = p.normalize(e.key);
+        if (safe.startsWith('..') || p.isAbsolute(safe)) continue; // zip-slip
+        final target = File(p.join(staging.path, safe));
+        await target.parent.create(recursive: true);
+        await target.writeAsBytes(e.value, flush: true);
+      }
+      return staging;
+    } catch (e) {
+      await _discard(staging);
+      throw BackupException(
+        'Couldn’t unpack the photos (is the phone out of space?), so nothing '
+        'was changed. ($e)',
+      );
+    }
+  }
+
+  /// Replaces the attachment folder with [staging]; returns the file count.
+  Future<int> _swapInAttachments(Directory staging) async {
+    final root = _attachments.root;
+    final old = Directory('${root.path}.old');
+    await _discard(old);
+    if (root.existsSync()) await root.rename(old.path);
+    try {
+      await staging.rename(root.path);
+    } catch (e) {
+      _log.warning('Swapping attachment folders failed, copying: $e');
+      await root.create(recursive: true);
+      await for (final f in staging.list(recursive: true)) {
+        if (f is! File) continue;
+        final target = File(
+          p.join(root.path, p.relative(f.path, from: staging.path)),
+        );
+        await target.parent.create(recursive: true);
+        await f.copy(target.path);
+      }
+      await _discard(staging);
+    }
+    await _discard(old);
+    return root.listSync(recursive: true).whereType<File>().length;
+  }
+
+  static Future<void> _discard(Directory dir) async {
+    try {
+      if (dir.existsSync()) await dir.delete(recursive: true);
+    } catch (e) {
+      _log.fine('Could not delete ${dir.path}: $e');
+    }
   }
 
   static bool _looksLikeZip(List<int> bytes) =>

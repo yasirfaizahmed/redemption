@@ -71,12 +71,28 @@ class _RedemptionAppState extends ConsumerState<RedemptionApp> {
       if (id != null) router.go(Routes.logTracker(id));
     } else if (payload == 'update') {
       router.go(Routes.home);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final context = router.routerDelegate.navigatorKey.currentContext;
-        if (context != null && context.mounted) showUpdateSheet(context);
-      });
+      _openUpdateSheetWhenReady();
     } else {
       router.go(Routes.today);
+    }
+  }
+
+  /// After a cold start the router (and its navigator) only exists once the
+  /// splash is gone, so keep trying for a few seconds.
+  void _openUpdateSheetWhenReady([int attempt = 0]) {
+    if (!mounted) return;
+    final context = ref
+        .read(routerProvider)
+        .routerDelegate
+        .navigatorKey
+        .currentContext;
+    if (context != null && context.mounted) {
+      showUpdateSheet(context);
+    } else if (attempt < 60) {
+      Future<void>.delayed(
+        const Duration(milliseconds: 150),
+        () => _openUpdateSheetWhenReady(attempt + 1),
+      );
     }
   }
 

@@ -56,6 +56,8 @@ Future<ImportSummary?> importBackupFile(
   final messenger = ScaffoldMessenger.of(context);
   final pick = ref.read(backupFilePickerProvider);
   final backup = ref.read(backupServiceProvider);
+  final settings = ref.read(settingsRepositoryProvider);
+  final notifications = ref.read(notificationServiceProvider);
   void snack(String message) => messenger
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(content: Text(message)));
@@ -72,7 +74,16 @@ Future<ImportSummary?> importBackupFile(
   onImporting?.call();
   try {
     final summary = await backup.importBytes(file.bytes);
+    // Continue Drive backups under a new install id, so today's
+    // pre-import snapshot stays in Drive as a restore point.
+    final s = await settings.load();
+    await settings.save(
+      s.copyWith(installId: '', driveLastBackupAt: () => null),
+    );
     snack('Imported ${summary.describe()}. Welcome back.');
+    // First run: onboarding (which normally asks) is skipped, but the
+    // imported reminders need the permission.
+    if (!replacing) await notifications.requestPermission();
     return summary;
   } on BackupException catch (e) {
     _log.warning('Import of ${file.name} refused: ${e.message}');

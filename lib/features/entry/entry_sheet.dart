@@ -202,7 +202,11 @@ class _EntrySheetState extends ConsumerState<EntrySheet> {
             ),
             const SizedBox(height: 20),
             TrackerInput(
-              tracker: tracker,
+              // On rule days (e.g. office days) options show today's credit.
+              tracker: switch (tracker.ruleOn(index.forDay(widget.day))) {
+                final rule? => tracker.withRuleCredits(rule),
+                null => tracker,
+              },
               value: _draft,
               use24h: settings.use24h,
               onChanged: (v) => _onChanged(tracker, v),

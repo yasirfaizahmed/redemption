@@ -254,6 +254,22 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
           if (o.label.text.trim().isNotEmpty) o.toOption(),
       ],
     );
+    // A day rule only keeps references to options that still exist.
+    if (config.dayRule case final rule?) {
+      final ids = {for (final o in config.options) o.id};
+      config = config.copyWith(
+        dayRule: () => rule.copyWith(
+          hideOptionIds: [
+            for (final id in rule.hideOptionIds)
+              if (ids.contains(id)) id,
+          ],
+          credits: {
+            for (final e in rule.credits.entries)
+              if (ids.contains(e.key)) e.key: e.value,
+          },
+        ),
+      );
+    }
     if (type == TrackerType.decimal) {
       final step = config.step.toString();
       final dot = step.indexOf('.');
@@ -795,6 +811,7 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
                               width: 56,
                               child: TextField(
                                 controller: o.emoji,
+                                onChanged: (_) => setState(() {}),
                                 textAlign: TextAlign.center,
                                 decoration: const InputDecoration(
                                   hintText: '🙂',
@@ -805,6 +822,7 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
                             Expanded(
                               child: TextField(
                                 controller: o.label,
+                                onChanged: (_) => setState(() {}),
                                 textCapitalization:
                                     TextCapitalization.sentences,
                                 decoration: InputDecoration(
@@ -1057,6 +1075,10 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
           ),
           _DayRuleEditor(
             tracker: draft,
+            options: [
+              for (final o in _options)
+                if (o.label.text.trim().isNotEmpty) o.toOption(),
+            ],
             candidates: [
               for (final other in ref.watch(activeTrackersProvider))
                 if (other.id != draft.id &&
@@ -1251,11 +1273,15 @@ Day trackerStartDay({
 class _DayRuleEditor extends StatelessWidget {
   const _DayRuleEditor({
     required this.tracker,
+    required this.options,
     required this.candidates,
     required this.onChanged,
   });
 
   final Tracker tracker;
+
+  /// This tracker's options as currently edited (not yet saved).
+  final List<ChoiceOption> options;
   final List<Tracker> candidates;
   final ValueChanged<DayRule?> onChanged;
 
@@ -1267,8 +1293,6 @@ class _DayRuleEditor extends StatelessWidget {
     final when = candidates
         .where((c) => c.id == rule?.whenTrackerId)
         .firstOrNull;
-    final options = tracker.config.options;
-
     Widget chips({
       required bool Function(ChoiceOption) selected,
       required void Function(ChoiceOption, bool) onSelected,

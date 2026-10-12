@@ -134,9 +134,12 @@ Future<bool> restoreFromDrive(
     );
     if (!ok) return false;
   }
+  final notifications = ref.read(notificationServiceProvider);
   try {
     await sync.restore(picked);
     _snack(messenger, 'Backup restored — welcome back.');
+    // On a fresh install onboarding (which normally asks) is skipped.
+    if (!confirmReplace) await notifications.requestPermission();
     return true;
   } catch (e) {
     _snack(messenger, 'Restore failed: $e');

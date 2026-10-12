@@ -9,7 +9,8 @@ import '../../../state/providers.dart';
 final _log = Logger('Upgrade');
 
 final journeyUpgradeProvider = Provider<JourneyUpgrade>(
-  (ref) => JourneyUpgrade.plan(ref.watch(activeTrackersProvider)),
+  (ref) =>
+      JourneyUpgrade.plan(ref.watch(allTrackersProvider).value ?? const []),
 );
 
 /// Offers new template improvements to an existing journey, once.
@@ -131,7 +132,7 @@ class _JourneyUpgradeCardState extends ConsumerState<JourneyUpgradeCard> {
                 children: [
                   TextButton(
                     onPressed: _busy ? null : _remember,
-                    child: const Text('Not now'),
+                    child: const Text('No thanks'),
                   ),
                   FilledButton(
                     onPressed: _busy ? null : () => _apply(upgrade),

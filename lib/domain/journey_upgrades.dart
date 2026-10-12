@@ -38,9 +38,19 @@ class JourneyUpgrade {
 
   bool get isEmpty => prayers.isEmpty && meals.isEmpty;
 
-  /// What applying the upgrade would change in [trackers] (empty if
-  /// nothing applies or it was applied already).
+  /// What applying the upgrade would change in a journey's [trackers]
+  /// (archived ones included). Empty when nothing applies, or when the
+  /// journey already has any of the additions (it came from the v1.1+
+  /// template, or was upgraded) — removing one later doesn't bring the
+  /// offer back.
   static JourneyUpgrade plan(List<Tracker> trackers) {
+    const none = JourneyUpgrade(workMode: null, prayers: [], meals: []);
+    final hasAdditions = trackers.any(
+      (t) =>
+          (officePrayers.contains(t.name) && t.config.dayRule != null) ||
+          mealNames.values.any((m) => t.name == '$m on time?'),
+    );
+    if (hasAdditions) return none;
     final active = [
       for (final t in trackers)
         if (!t.isArchived) t,
@@ -60,12 +70,10 @@ class JourneyUpgrade {
                   t.config.dayRule == null)
                 t,
           ];
-    final names = {for (final t in active) t.name};
+    final seen = <String>{};
     final meals = [
       for (final t in active)
-        if (mealNames[t.name] case final name?
-            when !names.contains('$name on time?'))
-          (t, name),
+        if (mealNames[t.name] case final name? when seen.add(name)) (t, name),
     ];
     return JourneyUpgrade(workMode: workMode, prayers: prayers, meals: meals);
   }

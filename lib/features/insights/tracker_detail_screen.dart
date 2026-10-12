@@ -9,6 +9,7 @@ import '../../core/widgets/common.dart';
 import '../../core/widgets/progress_ring.dart';
 import '../../domain/formatting.dart';
 import '../../domain/models.dart';
+import '../../domain/scoring.dart';
 import '../../domain/tracker_type.dart';
 import '../../domain/tracker_value.dart';
 import '../../state/providers.dart';
@@ -290,8 +291,14 @@ class _TrackerDetailScreenState extends ConsumerState<TrackerDetailScreen> {
   }
 
   Color _statusColor(WidgetRef ref, Tracker t, Entry e) {
-    final p = ref.read(scoringProvider).progress(t, e.value);
-    if (p >= 0.999) return Palette.success;
+    final p = ref
+        .read(scoringProvider)
+        .progress(
+          t,
+          e.value,
+          sameDay: ref.read(entryIndexProvider).forDay(e.day),
+        );
+    if (Scoring.isComplete(p)) return Palette.success;
     if (p > 0) return Palette.partial;
     return Palette.failure;
   }

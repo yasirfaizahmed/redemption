@@ -20,7 +20,8 @@ the GitHub release, and the app shows it under “What’s new” before updatin
   tracker can now be *different on certain days* (tracker editor → Goal).
 - **Meals on time.** “Breakfast / Lunch / Dinner on time?” checks that count
   towards the daily score. Existing journeys get a one-tap offer on the
-  dashboard to add both improvements (from today — past days keep their score).
+  dashboard to add both improvements (the meal checks start today, so past
+  days keep their score).
 - **Import data from any version.** *Import a backup file* on the welcome screen
   (or *Settings → Import data*) takes over a ZIP/JSON backup made by any
   version, including v1.0.0 — or simply install this update over v1.0.0: all
