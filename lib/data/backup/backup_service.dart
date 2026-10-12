@@ -25,6 +25,36 @@ class BackupException implements Exception {
   String toString() => message;
 }
 
+/// What an import brought in.
+class ImportSummary {
+  const ImportSummary({
+    required this.journeys,
+    required this.trackers,
+    required this.entries,
+    required this.attachments,
+    this.exportedAt,
+  });
+
+  final int journeys;
+  final int trackers;
+  final int entries;
+  final int attachments;
+
+  /// When the backup was made (null for very old/hand-made files).
+  final DateTime? exportedAt;
+
+  String describe() {
+    String n(int count, String one, String many) =>
+        '$count ${count == 1 ? one : many}';
+    return [
+      n(journeys, 'journey', 'journeys'),
+      n(trackers, 'tracker', 'trackers'),
+      n(entries, 'entry', 'entries'),
+      if (attachments > 0) n(attachments, 'photo/file', 'photos/files'),
+    ].join(' · ');
+  }
+}
+
 /// Full-fidelity backup (ZIP with JSON + attachments) and CSV export.
 class BackupService {
   BackupService(this._db, this._attachments);
@@ -100,19 +130,17 @@ class BackupService {
   }
 
   /// Restores from a `.zip` (or bare `.json`) backup file, replacing ALL data.
-  Future<void> importFile(File file) async => importBytes(
-    await file.readAsBytes(),
-    isJson: file.path.toLowerCase().endsWith('.json'),
-  );
+  Future<ImportSummary> importFile(File file) async =>
+      importBytes(await file.readAsBytes());
 
-  /// Restores from backup bytes, replacing ALL data. The archive is fully
-  /// validated before anything on the device is touched.
-  Future<void> importBytes(List<int> bytes, {bool isJson = false}) async {
+  /// Restores from backup bytes — a ZIP or a bare `backup.json` from any
+  /// version of the app, detected by content — replacing ALL data. The
+  /// backup is fully parsed and validated before anything is touched, and
+  /// the database is replaced in a single transaction.
+  Future<ImportSummary> importBytes(List<int> bytes) async {
     Map<String, dynamic> snapshot;
     final attachments = <String, List<int>>{};
-    if (isJson) {
-      snapshot = _decode(utf8.decode(bytes));
-    } else {
+    if (_looksLikeZip(bytes)) {
       final Archive archive;
       try {
         archive = ZipDecoder().decodeBytes(bytes);
@@ -123,29 +151,65 @@ class BackupService {
       if (json == null) {
         throw BackupException('This ZIP is not a Redemption backup.');
       }
-      snapshot = _decode(utf8.decode(json.content));
+      snapshot = _decode(json.content);
       for (final f in archive.files) {
         if (f.isFile && f.name.startsWith('attachments/')) {
           attachments[f.name.substring('attachments/'.length)] = f.content;
         }
       }
+    } else {
+      snapshot = _decode(bytes);
     }
-    await restoreSnapshot(snapshot);
+    try {
+      await restoreSnapshot(snapshot);
+    } on BackupException {
+      rethrow;
+    } catch (e, st) {
+      // The restore runs in one transaction, so nothing was changed.
+      _log.warning('Backup rows could not be imported', e, st);
+      throw BackupException(
+        'This backup could not be read, so nothing was changed. ($e)',
+      );
+    }
     await _attachments.clear();
+    var written = 0;
     for (final e in attachments.entries) {
       final safe = p.normalize(e.key);
       if (safe.startsWith('..') || p.isAbsolute(safe)) continue; // zip-slip
       await _attachments.writeBytes(safe, e.value);
+      written++;
     }
-    _log.info('Restored backup with ${attachments.length} attachments');
+    int count(String key) =>
+        (snapshot[key] as List<dynamic>? ?? const []).length;
+    final summary = ImportSummary(
+      journeys: count('journeys'),
+      trackers: count('trackers'),
+      entries: count('entries'),
+      attachments: written,
+      exportedAt: DateTime.tryParse(snapshot['exportedAt'] as String? ?? '')
+          ?.toLocal(),
+    );
+    _log.info(
+      'Imported backup v${snapshot['version']} '
+      '(schema ${snapshot['schemaVersion']}): ${summary.describe()}',
+    );
+    return summary;
   }
 
-  Map<String, dynamic> _decode(String text) {
-    final data = jsonDecode(text);
+  static bool _looksLikeZip(List<int> bytes) =>
+      bytes.length >= 4 && bytes[0] == 0x50 && bytes[1] == 0x4B; // "PK"
+
+  Map<String, dynamic> _decode(List<int> bytes) {
+    final Object? data;
+    try {
+      data = jsonDecode(utf8.decode(bytes, allowMalformed: true));
+    } on FormatException {
+      throw BackupException('This file is not a Redemption backup.');
+    }
     if (data is! Map<String, dynamic> || data['format'] != format) {
       throw BackupException('This file is not a Redemption backup.');
     }
-    final version = data['version'] as int? ?? 0;
+    final version = (data['version'] as num?)?.toInt() ?? 0;
     if (version > formatVersion) {
       throw BackupException(
         'This backup was made by a newer version of Redemption. '

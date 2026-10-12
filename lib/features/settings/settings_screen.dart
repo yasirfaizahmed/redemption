@@ -1,6 +1,3 @@
-import 'dart:io';
-
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:logging/logging.dart';
@@ -15,6 +12,7 @@ import '../../domain/app_settings.dart';
 import '../../domain/formatting.dart';
 import '../../state/providers.dart';
 import 'app_update_ui.dart';
+import 'backup_import.dart';
 import 'drive_backup.dart';
 
 final _log = Logger('Settings');
@@ -58,38 +56,6 @@ class SettingsScreen extends ConsumerWidget {
     } catch (e, s) {
       _log.severe('CSV export failed', e, s);
       if (context.mounted) showSnack(context, 'Export failed: $e');
-    }
-  }
-
-  Future<void> _importBackup(BuildContext context, WidgetRef ref) async {
-    final ok = await confirm(
-      context,
-      title: 'Restore a backup?',
-      message: 'This REPLACES all journeys, trackers, entries and settings on this device.',
-      confirmLabel: 'Choose file',
-      destructive: true,
-    );
-    if (!ok) return;
-    final picked = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: const ['zip', 'json'],
-    );
-    final path = picked?.path;
-    if (picked == null) return;
-    try {
-      File file;
-      if (path != null) {
-        file = File(path);
-      } else {
-        // Content URI: copy to a temp file first.
-        file = File('${Directory.systemTemp.path}/${picked.name}');
-        await picked.xFile.saveTo(file.path);
-      }
-      await ref.read(backupServiceProvider).importFile(file);
-      if (context.mounted) showSnack(context, 'Backup restored');
-    } catch (e, s) {
-      _log.severe('Restore failed', e, s);
-      if (context.mounted) showSnack(context, 'Restore failed: $e');
     }
   }
 
@@ -320,14 +286,18 @@ class SettingsScreen extends ConsumerWidget {
             leading: const Icon(Icons.backup_outlined),
             title: const Text('Export full backup'),
             subtitle: const Text(
-              'ZIP with all data and photos — save it to Drive or Files',
+              'ZIP with all data and photos — keep it safe, or import it on '
+              'another phone',
             ),
             onTap: () => _exportBackup(context, ref),
           ),
           ListTile(
             leading: const Icon(Icons.restore_rounded),
-            title: const Text('Restore from backup'),
-            onTap: () => _importBackup(context, ref),
+            title: const Text('Import data'),
+            subtitle: const Text(
+              'From a backup file (ZIP or JSON) made by any version',
+            ),
+            onTap: () => importBackupFile(context, ref, replacing: true),
           ),
           ListTile(
             leading: const Icon(Icons.table_chart_outlined),

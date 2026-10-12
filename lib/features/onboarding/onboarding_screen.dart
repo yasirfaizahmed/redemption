@@ -9,6 +9,7 @@ import '../../domain/templates.dart';
 import '../../state/drive_sync.dart';
 import '../../state/providers.dart';
 import '../journey/journey_form.dart';
+import '../settings/backup_import.dart';
 import '../settings/drive_backup.dart';
 
 /// First-run flow: the why → pick a template → shape the journey.
@@ -31,6 +32,19 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Day? _start;
   int _dayStart = 180;
   bool _busy = false;
+  bool _importing = false;
+
+  /// Already have data (an older version, another phone)? Bring it in.
+  Future<void> _importBackup() async {
+    final summary = await importBackupFile(
+      context,
+      ref,
+      replacing: false,
+      onImporting: () => setState(() => _importing = true),
+    );
+    // On success the router leaves onboarding as soon as the journey exists.
+    if (summary == null && mounted) setState(() => _importing = false);
+  }
 
   @override
   void dispose() {
@@ -119,7 +133,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                             freshInstall: true,
                           )
                         : null,
-                    restoring: ref.watch(driveSyncProvider).busy,
+                    onImport: _importBackup,
+                    restoring: ref.watch(driveSyncProvider).busy || _importing,
                   ),
                   _TemplatePage(
                     selected: _template,
@@ -158,9 +173,13 @@ class _WelcomePage extends StatelessWidget {
   const _WelcomePage({
     required this.onNext,
     required this.onRestore,
+    required this.onImport,
     required this.restoring,
   });
   final VoidCallback onNext;
+
+  /// Import a backup file exported by any version of the app.
+  final VoidCallback onImport;
 
   /// Reinstalled? Bring the journey back from Google Drive. Null when Drive
   /// backup isn't available on this device.
@@ -248,7 +267,7 @@ class _WelcomePage extends StatelessWidget {
           ),
         ),
         Padding(
-          padding: EdgeInsets.fromLTRB(20, 8, 20, onRestore == null ? 16 : 4),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
           child: SizedBox(
             width: double.infinity,
             child: FilledButton(
@@ -257,27 +276,45 @@ class _WelcomePage extends StatelessWidget {
             ),
           ),
         ),
-        if (onRestore != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-            child: SizedBox(
-              width: double.infinity,
-              child: TextButton.icon(
-                onPressed: restoring ? null : onRestore,
-                icon: restoring
-                    ? const SizedBox.square(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+          child: restoring
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const SizedBox.square(
                         dimension: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.cloud_download_outlined),
-                label: Text(
-                  restoring
-                      ? 'Bringing your journey back…'
-                      : 'Restore from Google Drive',
+                      ),
+                      const SizedBox(width: 12),
+                      Flexible(
+                        child: Text(
+                          'Bringing your journey back…',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : Wrap(
+                  alignment: WrapAlignment.center,
+                  children: [
+                    if (onRestore != null)
+                      TextButton.icon(
+                        onPressed: onRestore,
+                        icon: const Icon(Icons.cloud_download_outlined),
+                        label: const Text('Restore from Google Drive'),
+                      ),
+                    TextButton.icon(
+                      onPressed: onImport,
+                      icon: const Icon(Icons.file_open_outlined),
+                      label: const Text('Import a backup file'),
+                    ),
+                  ],
                 ),
-              ),
-            ),
-          ),
+        ),
       ],
     );
   }
