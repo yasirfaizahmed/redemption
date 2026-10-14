@@ -9,6 +9,7 @@ import 'package:redemption/data/repositories/journey_repository.dart';
 import 'package:redemption/data/repositories/tracker_repository.dart';
 import 'package:redemption/data/storage/attachment_store.dart';
 import 'package:redemption/domain/templates.dart';
+import 'package:redemption/domain/tracker_type.dart';
 import 'package:redemption/domain/tracker_value.dart';
 import 'package:redemption/features/today/tracker_tile.dart';
 
@@ -96,6 +97,10 @@ void main() {
     expect(find.text('New for your journey'), findsOneWidget);
     expect(find.textContaining('Dhuhr, Asr & Maghrib'), findsOneWidget);
     expect(find.textContaining('Breakfast, Lunch & Dinner'), findsOneWidget);
+    expect(
+      find.textContaining('Workout becomes “Did you train?”'),
+      findsOneWidget,
+    );
 
     await tester.tap(find.text('Add to my journey'));
     await settle(tester, rounds: 12);
@@ -112,6 +117,10 @@ void main() {
     expect(
       trackers.firstWhere((t) => t.name == 'Maghrib').config.dayRule,
       isNotNull,
+    );
+    expect(
+      trackers.firstWhere((t) => t.name == 'Workout').type,
+      TrackerType.checkbox,
     );
   });
 }

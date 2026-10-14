@@ -83,6 +83,7 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
   final _placeholder = TextEditingController();
   final _yes = TextEditingController();
   final _no = TextEditingController();
+  final _notePrompt = TextEditingController();
   final _goalValue = TextEditingController();
   final _goalUpper = TextEditingController();
   final List<_OptionDraft> _options = [];
@@ -120,6 +121,7 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
       _placeholder,
       _yes,
       _no,
+      _notePrompt,
       _goalValue,
       _goalUpper,
     ]) {
@@ -151,6 +153,7 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
     _placeholder.text = c.placeholder;
     _yes.text = c.yesLabel;
     _no.text = c.noLabel;
+    _notePrompt.text = c.notePrompt;
     for (final o in _options) {
       o.dispose();
     }
@@ -249,6 +252,7 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
       placeholder: _placeholder.text.trim(),
       yesLabel: _yes.text.trim().isEmpty ? 'Yes' : _yes.text.trim(),
       noLabel: _no.text.trim().isEmpty ? 'No' : _no.text.trim(),
+      notePrompt: type == TrackerType.checkbox ? _notePrompt.text.trim() : '',
       options: [
         for (final o in _options)
           if (o.label.text.trim().isNotEmpty) o.toOption(),
@@ -771,6 +775,11 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
             field(_yes, '“Yes” label', hint: 'Prayed, Done…'),
             field(_no, '“No” label', hint: 'Missed, Skipped…'),
           ]),
+          field(
+            _notePrompt,
+            'Ask for a comment (optional)',
+            hint: 'What did you train?',
+          ),
         ];
       case TrackerType.singleChoice || TrackerType.multiChoice:
         final single = draft.type == TrackerType.singleChoice;

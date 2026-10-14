@@ -3,17 +3,22 @@ import 'package:logging/logging.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../core/widgets/common.dart';
+import '../../../data/repositories/upgrade_repository.dart';
 import '../../../domain/journey_upgrades.dart';
 import '../../../state/providers.dart';
 
 final _log = Logger('Upgrade');
 
 final journeyUpgradeProvider = Provider<JourneyUpgrade>(
-  (ref) =>
-      JourneyUpgrade.plan(ref.watch(allTrackersProvider).value ?? const []),
+  (ref) => JourneyUpgrade.plan(
+    ref.watch(allTrackersProvider).value ?? const [],
+    dismissed: ref.watch(
+      settingsValueProvider.select((s) => s.dismissedUpgrades),
+    ),
+  ),
 );
 
-/// Offers new template improvements to an existing journey, once.
+/// Offers new template improvements to an existing journey, once each.
 class JourneyUpgradeCard extends ConsumerStatefulWidget {
   const JourneyUpgradeCard({super.key});
 
@@ -24,13 +29,11 @@ class JourneyUpgradeCard extends ConsumerStatefulWidget {
 class _JourneyUpgradeCardState extends ConsumerState<JourneyUpgradeCard> {
   bool _busy = false;
 
-  Future<void> _remember() async {
+  Future<void> _remember(Set<String> ids) async {
     final repo = ref.read(settingsRepositoryProvider);
     final s = await repo.load();
     await repo.save(
-      s.copyWith(
-        dismissedUpgrades: {...s.dismissedUpgrades, JourneyUpgrade.id},
-      ),
+      s.copyWith(dismissedUpgrades: {...s.dismissedUpgrades, ...ids}),
     );
   }
 
@@ -39,21 +42,11 @@ class _JourneyUpgradeCardState extends ConsumerState<JourneyUpgradeCard> {
     if (journey == null) return;
     setState(() => _busy = true);
     try {
-      final trackers = ref.read(trackerRepositoryProvider);
-      for (final p in upgrade.prayersWithRule()) {
-        await trackers.update(p);
-      }
-      for (final t in upgrade.newMealChecks(
-        journeyId: journey.id,
-        from: ref.read(todayProvider),
-      )) {
-        await trackers.insert(t);
-      }
-      await _remember();
-      _log.info(
-        'Applied journey upgrade: ${upgrade.prayers.length} prayers, '
-        '${upgrade.meals.length} meal checks',
-      );
+      await UpgradeRepository(
+        ref.read(databaseProvider),
+      ).apply(upgrade, journeyId: journey.id, today: ref.read(todayProvider));
+      await _remember(upgrade.ids);
+      _log.info('Applied journey upgrade ${upgrade.ids}');
       if (mounted) showSnack(context, 'Added to your journey — see Today.');
     } catch (e, s) {
       _log.severe('Journey upgrade failed', e, s);
@@ -65,13 +58,8 @@ class _JourneyUpgradeCardState extends ConsumerState<JourneyUpgradeCard> {
 
   @override
   Widget build(BuildContext context) {
-    final dismissed = ref.watch(
-      settingsValueProvider.select(
-        (s) => s.dismissedUpgrades.contains(JourneyUpgrade.id),
-      ),
-    );
     final upgrade = ref.watch(journeyUpgradeProvider);
-    if (dismissed || upgrade.isEmpty) return const SizedBox.shrink();
+    if (upgrade.isEmpty) return const SizedBox.shrink();
 
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -126,12 +114,20 @@ class _JourneyUpgradeCardState extends ConsumerState<JourneyUpgradeCard> {
                       '${list(upgrade.meals.map((m) => m.$2))} that count '
                       'towards your score (from today, past days unchanged).',
                 ),
+              if (upgrade.workout != null)
+                const _Point(
+                  icon: Icons.fitness_center_rounded,
+                  text:
+                      'Workout becomes “Did you train?”: Trained earns the '
+                      'points, with a comment for what you did. What you '
+                      'already wrote moves into the comments.',
+                ),
               Wrap(
                 alignment: WrapAlignment.end,
                 spacing: 8,
                 children: [
                   TextButton(
-                    onPressed: _busy ? null : _remember,
+                    onPressed: _busy ? null : () => _remember(upgrade.ids),
                     child: const Text('No thanks'),
                   ),
                   FilledButton(

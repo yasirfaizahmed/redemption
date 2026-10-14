@@ -119,6 +119,26 @@ DayRule officeDayRule({String whenRef = 'workmode', int whenTrackerId = 0}) =>
       credits: const {'ontime': 1},
     );
 
+/// Did you train? A win earns full points; the comment records what you did.
+Tracker workoutTracker({required int at, String section = 'Evening'}) => _t(
+  name: 'Workout',
+  type: TrackerType.checkbox,
+  icon: 'gym',
+  color: 0xFFEF4444,
+  section: section,
+  at: at,
+  description: 'Did you train today? Add what you did.',
+  config: workoutConfig,
+  goal: const BoolGoal(),
+);
+
+const workoutConfig = TrackerConfig(
+  yesLabel: 'Trained',
+  noLabel: 'Skipped',
+  notePrompt: 'What did you train?',
+  placeholder: 'Push day: bench 4×8, OHP 3×10, dips…',
+);
+
 /// "Had it on time?" for a meal; counts towards the daily score.
 Tracker mealOnTime(String meal, {required String section, required int at}) =>
     _t(
@@ -258,21 +278,7 @@ abstract final class Templates {
           rule: officeDayRule(),
         ),
       ),
-      TemplateTracker(
-        'workout',
-        _t(
-          name: 'Workout',
-          type: TrackerType.longText,
-          icon: 'gym',
-          color: 0xFFEF4444,
-          section: 'Evening',
-          at: _hm(19, 0),
-          description: 'What did you train?',
-          config: const TrackerConfig(
-            placeholder: 'Push day: bench 4×8, OHP 3×10, dips…',
-          ),
-        ),
-      ),
+      TemplateTracker('workout', workoutTracker(at: _hm(19, 0))),
       TemplateTracker(
         'dinner',
         _t(

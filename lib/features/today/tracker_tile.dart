@@ -52,8 +52,15 @@ class TrackerTile extends ConsumerWidget {
     final statusColor = Palette.forStatus(status, scheme);
     final logged = entry != null && !entry.value.isEmpty;
 
+    final comment = entry?.note.trim() ?? '';
     final subtitle = logged
-        ? Fmt.value(tracker, entry.value, use24h: settings.use24h)
+        ? [
+            Fmt.value(tracker, entry.value, use24h: settings.use24h),
+            if (comment.isNotEmpty)
+              comment.replaceAll('\n', ' · ')
+            else if (tracker.config.notePrompt.isNotEmpty)
+              'tap to add what you did',
+          ].join(' — ')
         : tracker.goal is LoggedGoal
         ? (tracker.isRequired ? 'Tap to log' : 'Optional · tap to log')
         : 'Goal: ${Fmt.goal(tracker, use24h: settings.use24h)}';
