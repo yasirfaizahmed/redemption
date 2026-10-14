@@ -55,7 +55,11 @@ class _EntrySheetState extends ConsumerState<EntrySheet> {
     final tracker = ref.read(trackerByIdProvider(widget.trackerId));
     _draft = _existing?.value ?? _defaultDraft(tracker);
     _note = TextEditingController(text: _existing?.note ?? '');
-    _noteOpen = _note.text.isNotEmpty;
+    // Trackers that ask for a comment (e.g. "What did you train?") open
+    // with the comment box, and don't save on the first tap.
+    _noteOpen =
+        _note.text.isNotEmpty ||
+        (tracker?.config.notePrompt.isNotEmpty ?? false);
   }
 
   @override
@@ -219,12 +223,17 @@ class _EntrySheetState extends ConsumerState<EntrySheet> {
             if (_noteOpen)
               TextField(
                 controller: _note,
-                minLines: 1,
-                maxLines: 4,
+                minLines: tracker.config.notePrompt.isEmpty ? 1 : 2,
+                maxLines: 6,
                 textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Note',
-                  prefixIcon: Icon(Icons.sticky_note_2_outlined),
+                decoration: InputDecoration(
+                  labelText: tracker.config.notePrompt.isEmpty
+                      ? 'Note'
+                      : tracker.config.notePrompt,
+                  hintText: tracker.config.notePrompt.isEmpty
+                      ? null
+                      : tracker.config.placeholder,
+                  prefixIcon: const Icon(Icons.sticky_note_2_outlined),
                 ),
               )
             else

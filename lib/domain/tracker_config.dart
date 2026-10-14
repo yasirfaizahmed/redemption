@@ -175,6 +175,7 @@ class TrackerConfig {
     this.noLabel = 'No',
     this.maxAttachments = 4,
     this.dayRule,
+    this.notePrompt = '',
   });
 
   factory TrackerConfig.fromJson(Map<String, dynamic> json) => TrackerConfig(
@@ -209,6 +210,7 @@ class TrackerConfig {
     dayRule: json['dayRule'] is Map<String, dynamic>
         ? DayRule.fromJson(json['dayRule'] as Map<String, dynamic>)
         : null,
+    notePrompt: json['notePrompt'] as String? ?? '',
   );
 
   /// Unit suffix for numeric types (kg, km, glasses…).
@@ -242,6 +244,10 @@ class TrackerConfig {
   /// Choice trackers: how they change on certain days (see [DayRule]).
   final DayRule? dayRule;
 
+  /// When set, the entry sheet opens with a comment box asking this
+  /// (e.g. "What did you train?"), and the timeline shows the comment.
+  final String notePrompt;
+
   ChoiceOption? optionById(String id) =>
       options.firstWhereOrNull((o) => o.id == id);
 
@@ -263,6 +269,7 @@ class TrackerConfig {
     String? noLabel,
     int? maxAttachments,
     DayRule? Function()? dayRule,
+    String? notePrompt,
   }) => TrackerConfig(
     unit: unit ?? this.unit,
     min: min != null ? min() : this.min,
@@ -281,6 +288,7 @@ class TrackerConfig {
     noLabel: noLabel ?? this.noLabel,
     maxAttachments: maxAttachments ?? this.maxAttachments,
     dayRule: dayRule != null ? dayRule() : this.dayRule,
+    notePrompt: notePrompt ?? this.notePrompt,
   );
 
   Map<String, dynamic> toJson() => {
@@ -301,6 +309,7 @@ class TrackerConfig {
     'noLabel': noLabel,
     'maxAttachments': maxAttachments,
     if (dayRule case final rule? when rule.isResolved) 'dayRule': rule.toJson(),
+    if (notePrompt.isNotEmpty) 'notePrompt': notePrompt,
   };
 
   @override

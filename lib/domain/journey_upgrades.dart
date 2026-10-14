@@ -6,15 +6,23 @@ import 'templates.dart';
 import 'tracker_type.dart';
 
 /// Improvements made to the Redemption template after v1.0.0 that an
-/// existing journey can opt into, without touching its history.
+/// existing journey can opt into, without touching its scores.
+///
+/// Each part has its own id, so declining or applying one never hides a
+/// part added in a later version.
 class JourneyUpgrade {
   const JourneyUpgrade({
-    required this.workMode,
-    required this.prayers,
-    required this.meals,
+    this.workMode,
+    this.prayers = const [],
+    this.meals = const [],
+    this.workout,
   });
 
-  static const id = 'office-day-prayers-and-meal-times';
+  /// Office-day prayers + meal on-time checks (v1.1.0).
+  static const officeAndMealsId = 'office-day-prayers-and-meal-times';
+
+  /// Workout as Yes/No with a comment (v1.2.0).
+  static const workoutId = 'workout-yes-no';
 
   /// Prayers checked against [workMode] on office days.
   static const officePrayers = {'Dhuhr', 'Asr', 'Maghrib'};
@@ -36,46 +44,77 @@ class JourneyUpgrade {
   /// Meals that get an "on time?" check, with the check's meal name.
   final List<(Tracker meal, String name)> meals;
 
-  bool get isEmpty => prayers.isEmpty && meals.isEmpty;
+  /// A text "Workout" tracker to turn into "Did you train?" + comment.
+  final Tracker? workout;
+
+  bool get hasOfficeAndMeals => prayers.isNotEmpty || meals.isNotEmpty;
+  bool get isEmpty => !hasOfficeAndMeals && workout == null;
+
+  /// Ids of the parts this upgrade contains.
+  Set<String> get ids => {
+    if (hasOfficeAndMeals) officeAndMealsId,
+    if (workout != null) workoutId,
+  };
 
   /// What applying the upgrade would change in a journey's [trackers]
-  /// (archived ones included). Empty when nothing applies, or when the
-  /// journey already has any of the additions (it came from the v1.1+
-  /// template, or was upgraded) — removing one later doesn't bring the
-  /// offer back.
-  static JourneyUpgrade plan(List<Tracker> trackers) {
-    const none = JourneyUpgrade(workMode: null, prayers: [], meals: []);
+  /// (archived ones included), leaving out [dismissed] parts.
+  static JourneyUpgrade plan(
+    List<Tracker> trackers, {
+    Set<String> dismissed = const {},
+  }) {
+    final active = [
+      for (final t in trackers)
+        if (!t.isArchived) t,
+    ];
+
+    // Office days & meals: only for journeys with none of the additions
+    // (they came from the v1.1+ template, or were upgraded) — removing one
+    // later doesn't bring the offer back.
     final hasAdditions = trackers.any(
       (t) =>
           (officePrayers.contains(t.name) && t.config.dayRule != null) ||
           mealNames.values.any((m) => t.name == '$m on time?'),
     );
-    if (hasAdditions) return none;
-    final active = [
-      for (final t in trackers)
-        if (!t.isArchived) t,
-    ];
-    final workMode = active.firstWhereOrNull(
-      (t) =>
-          t.type == TrackerType.singleChoice &&
-          t.config.optionById('office') != null,
+    Tracker? workMode;
+    var prayers = const <Tracker>[];
+    var meals = const <(Tracker, String)>[];
+    if (!hasAdditions && !dismissed.contains(officeAndMealsId)) {
+      workMode = active.firstWhereOrNull(
+        (t) =>
+            t.type == TrackerType.singleChoice &&
+            t.config.optionById('office') != null,
+      );
+      prayers = workMode == null
+          ? const []
+          : [
+              for (final t in active)
+                if (officePrayers.contains(t.name) &&
+                    t.type == TrackerType.singleChoice &&
+                    t.config.optionById('ontime') != null &&
+                    t.config.dayRule == null)
+                  t,
+            ];
+      final seen = <String>{};
+      meals = [
+        for (final t in active)
+          if (mealNames[t.name] case final name? when seen.add(name)) (t, name),
+      ];
+    }
+
+    final workout = dismissed.contains(workoutId)
+        ? null
+        : active.firstWhereOrNull(
+            (t) =>
+                t.name == 'Workout' &&
+                (t.type == TrackerType.longText || t.type == TrackerType.text),
+          );
+
+    return JourneyUpgrade(
+      workMode: workMode,
+      prayers: prayers,
+      meals: meals,
+      workout: workout,
     );
-    final prayers = workMode == null
-        ? const <Tracker>[]
-        : [
-            for (final t in active)
-              if (officePrayers.contains(t.name) &&
-                  t.type == TrackerType.singleChoice &&
-                  t.config.optionById('ontime') != null &&
-                  t.config.dayRule == null)
-                t,
-          ];
-    final seen = <String>{};
-    final meals = [
-      for (final t in active)
-        if (mealNames[t.name] case final name? when seen.add(name)) (t, name),
-    ];
-    return JourneyUpgrade(workMode: workMode, prayers: prayers, meals: meals);
   }
 
   /// The "on time?" trackers to add, starting [from] (so no past day
@@ -98,4 +137,17 @@ class JourneyUpgrade {
         ),
       ),
   ];
+
+  /// [workout] as "Did you train?" (win = Trained) asking for a comment.
+  /// Keeps its id, schedule, reminders and history.
+  Tracker? workoutAsYesNo() => workout?.copyWith(
+    type: TrackerType.checkbox,
+    goal: workoutTracker(at: 0).goal,
+    description: workoutTracker(at: 0).description,
+    config: workoutConfig.copyWith(
+      placeholder: workout!.config.placeholder.isEmpty
+          ? workoutConfig.placeholder
+          : workout!.config.placeholder,
+    ),
+  );
 }

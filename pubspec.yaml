@@ -2,7 +2,7 @@ name: redemption
 description: "Redemption — rewire your brain in 90 days. A fully customisable daily discipline tracker."
 publish_to: 'none'
 
-version: 1.1.0+2
+version: 1.2.0+3
 
 environment:
   sdk: ^3.13.5

@@ -3,6 +3,15 @@
 Every release's notes come from its section below: CI copies the section into
 the GitHub release, and the app shows it under “What’s new” before updating.
 
+## 1.2.0
+
+- **Workout is now “Did you train?”.** One tap on ✓ logs *Trained* and earns the
+  points; the sheet opens with a “What did you train?” comment box, and the
+  timeline shows your comment next to the answer. Already using the app? The
+  dashboard offers to switch your Workout over: what you wrote on earlier days
+  becomes their comment, so nothing is lost and past scores stay the same.
+- Any Yes/No tracker can ask for a comment (tracker editor → *Ask for a comment*).
+
 ## 1.1.0
 
 - **In-app updates.** Redemption now checks GitHub for new versions when you open

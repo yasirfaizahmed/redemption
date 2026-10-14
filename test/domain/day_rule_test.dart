@@ -9,6 +9,7 @@ import 'package:redemption/data/db/database.dart';
 import 'package:redemption/data/repositories/entry_repository.dart';
 import 'package:redemption/data/repositories/journey_repository.dart';
 import 'package:redemption/data/repositories/tracker_repository.dart';
+import 'package:redemption/data/repositories/upgrade_repository.dart';
 import 'package:redemption/data/storage/attachment_store.dart';
 import 'package:redemption/domain/journey_upgrades.dart';
 import 'package:redemption/domain/models.dart';
@@ -164,6 +165,10 @@ void main() {
         expect(t.goal, const BoolGoal());
         expect(t.isRequired, isTrue);
       }
+      final workout = trackers.firstWhere((t) => t.name == 'Workout');
+      expect(workout.type, TrackerType.checkbox);
+      expect(workout.config.notePrompt, 'What did you train?');
+      expect(workout.isRequired, isTrue);
       expect(JourneyUpgrade.plan(trackers).isEmpty, isTrue);
       // Removing one of the additions doesn't bring the offer back.
       await TrackerRepository(db)
@@ -220,32 +225,57 @@ void main() {
       final entries = EntryIndex(
         await EntryRepository(db).watchForJourney(journey.id).first,
       );
-      final before = scoring.summarize(journey.startDay, trackers, entries);
+      final before = (trackers,);
 
       final upgrade = JourneyUpgrade.plan(trackers);
       expect(upgrade.prayers.map((p) => p.name), ['Dhuhr', 'Asr', 'Maghrib']);
       expect(upgrade.meals.map((m) => m.$2), ['Breakfast', 'Lunch', 'Dinner']);
+      expect(upgrade.workout?.name, 'Workout');
+      expect(upgrade.ids, {
+        JourneyUpgrade.officeAndMealsId,
+        JourneyUpgrade.workoutId,
+      });
+      final workoutId = upgrade.workout!.id;
+      final oldWorkouts = {
+        for (final e in entries.forTracker(workoutId).values)
+          e.day: (e.value as TextValue).text,
+      };
+      expect(oldWorkouts, hasLength(2));
 
       const today = Day(2026, 10, 12);
-      for (final p in upgrade.prayersWithRule()) {
-        await repo.update(p);
-      }
-      for (final t in upgrade.newMealChecks(
-        journeyId: journey.id,
-        from: today,
-      )) {
-        await repo.insert(t);
-      }
+      await UpgradeRepository(db)
+          .apply(upgrade, journeyId: journey.id, today: today);
       trackers = await repo.forJourney(journey.id);
       expect(JourneyUpgrade.plan(trackers).isEmpty, isTrue);
+
+      // Workout is now "Did you train?" and its history became comments.
+      final workout = trackers.firstWhere((t) => t.id == workoutId);
+      expect(workout.type, TrackerType.checkbox);
+      expect(workout.goal, const BoolGoal());
+      expect(workout.config.yesLabel, 'Trained');
+      expect(workout.config.notePrompt, 'What did you train?');
+      final converted = EntryIndex(
+        await EntryRepository(db).watchForJourney(journey.id).first,
+      ).forTracker(workoutId);
+      for (final MapEntry(key: day, value: text) in oldWorkouts.entries) {
+        expect(converted[day]!.value, const BoolValue(true));
+        expect(converted[day]!.note, startsWith(text));
+      }
+
       final breakfastCheck = trackers.firstWhere(
         (t) => t.name == 'Breakfast on time?',
       );
       expect(breakfastCheck.activeFrom, today);
 
-      final after = scoring.summarize(journey.startDay, trackers, entries);
-      expect(after.score, before.score, reason: 'history is untouched');
-      expect(after.expected, before.expected);
+      final now = EntryIndex(
+        await EntryRepository(db).watchForJourney(journey.id).first,
+      );
+      for (final d in [journey.startDay, journey.startDay.addDays(1)]) {
+        final was = scoring.summarize(d, before.$1, entries);
+        final after = scoring.summarize(d, trackers, now);
+        expect(after.score, was.score, reason: 'scores unchanged on $d');
+        expect(after.expected, was.expected);
+      }
     });
   });
 }
