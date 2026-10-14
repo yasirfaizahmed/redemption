@@ -57,7 +57,7 @@ class TrackerTile extends ConsumerWidget {
         ? [
             Fmt.value(tracker, entry.value, use24h: settings.use24h),
             if (comment.isNotEmpty)
-              comment.replaceAll('\n', ' · ')
+              comment.replaceAll(RegExp(r'\s*\n\s*'), ' · ')
             else if (tracker.config.notePrompt.isNotEmpty)
               'tap to add what you did',
           ].join(' — ')

@@ -181,6 +181,29 @@ void main() {
       );
     });
 
+    test('a description the user wrote survives the workout switch', () {
+      const own = Tracker(
+        id: 7,
+        journeyId: 1,
+        name: 'Workout',
+        type: TrackerType.longText,
+        icon: 'gym',
+        color: 0,
+        activeFrom: day,
+        description: 'PPL split, Mon/Wed/Fri',
+      );
+      expect(
+        JourneyUpgrade.plan([own]).workoutAsYesNo()!.description,
+        'PPL split, Mon/Wed/Fri',
+      );
+      expect(
+        JourneyUpgrade.plan([own.copyWith(description: 'What did you train?')])
+            .workoutAsYesNo()!
+            .description,
+        workoutTracker(at: 0).description,
+      );
+    });
+
     test('one “Dinner on time?” even with two dinner trackers', () {
       Tracker meal(int id, String name) => Tracker(
         id: id,
@@ -247,6 +270,17 @@ void main() {
           .apply(upgrade, journeyId: journey.id, today: today);
       trackers = await repo.forJourney(journey.id);
       expect(JourneyUpgrade.plan(trackers).isEmpty, isTrue);
+
+      // The timeline keeps its order (sort order follows planned times).
+      final ordered = [
+        for (final t in trackers)
+          if (t.anchorMinutes != null) t.anchorMinutes!,
+      ];
+      expect(ordered, [...ordered]..sort(), reason: 'timeline in time order');
+      expect(
+        trackers.map((t) => t.sortOrder).toSet(),
+        hasLength(trackers.length),
+      );
 
       // Workout is now "Did you train?" and its history became comments.
       final workout = trackers.firstWhere((t) => t.id == workoutId);

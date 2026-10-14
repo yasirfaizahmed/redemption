@@ -88,9 +88,18 @@ class _EntrySheetState extends ConsumerState<EntrySheet> {
   Future<void> _save(Tracker tracker) async {
     if (_saving) return;
     setState(() => _saving = true);
+    // Answering "What did you train?" without tapping an answer means it
+    // happened: log the win so the comment isn't stored without points.
+    final value =
+        (_draft == null || _draft!.isEmpty) &&
+            tracker.type == TrackerType.checkbox &&
+            tracker.config.notePrompt.isNotEmpty &&
+            _note.text.trim().isNotEmpty
+        ? BoolValue(tracker.winAnswer)
+        : _draft;
     await ref
         .read(entryActionsProvider)
-        .save(tracker, widget.day, _draft, note: _note.text);
+        .save(tracker, widget.day, value, note: _note.text);
     if (mounted) Navigator.of(context).pop();
   }
 

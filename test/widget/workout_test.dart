@@ -68,4 +68,40 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('writing what you trained without tapping an answer counts '
+      'as Trained', (tester) async {
+    usePhoneSurface(tester);
+    final env = await createEnv(tester, template: Templates.redemption);
+    addTearDown(() => disposeEnv(tester, env));
+
+    await tester.pumpWidget(buildApp(env));
+    await settle(tester);
+    await tester.tap(find.text('Today').last);
+    await settle(tester);
+    await tester.dragUntilVisible(
+      find.text('Workout'),
+      find.byType(CustomScrollView),
+      const Offset(0, -300),
+    );
+    await settle(tester);
+    await tester.tap(find.text('Workout'));
+    await settle(tester);
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'What did you train?'),
+      'Legs\n\nSquats 5×5',
+    );
+    await tester.tap(find.text('Save'));
+    await settle(tester);
+
+    final journey = (await tester.runAsync(
+      () => JourneyRepository(env.db).active(),
+    ))!;
+    final entry = (await tester.runAsync(
+      () => EntryRepository(env.db).watchForJourney(journey.id).first,
+    ))!.single;
+    expect(entry.value, const BoolValue(true));
+    expect(find.text('Trained — Legs · Squats 5×5'), findsOneWidget);
+  });
 }

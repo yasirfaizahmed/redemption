@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart';
 import 'package:logging/logging.dart';
 
 import '../../core/time/day.dart';
@@ -22,14 +23,20 @@ class UpgradeRepository {
     required Day today,
   }) => _db.transaction(() async {
     final trackers = TrackerRepository(_db);
-    for (final p in upgrade.prayersWithRule()) {
-      await trackers.update(p);
-    }
-    for (final t in upgrade.newMealChecks(journeyId: journeyId, from: today)) {
-      await trackers.insert(t);
-    }
+    // Workout first, writing only the columns that change: the meal-check
+    // inserts below renumber sort orders, which a full-row write of the
+    // (older) planned tracker would undo.
     if (upgrade.workoutAsYesNo() case final workout?) {
-      await trackers.update(workout);
+      await (_db.update(
+        _db.trackers,
+      )..where((t) => t.id.equals(workout.id))).write(
+        TrackersCompanion(
+          type: Value(workout.type),
+          goal: Value(workout.goal),
+          description: Value(workout.description),
+          config: Value(workout.config),
+        ),
+      );
       // What was written about a workout becomes the comment of a
       // "Trained" — the day keeps its credit and nothing is lost.
       final rows = await (_db.select(
@@ -52,6 +59,14 @@ class UpgradeRepository {
         converted++;
       }
       _log.info('Workout is now Yes/No; $converted past entries converted');
+    }
+    for (final p in upgrade.prayersWithRule()) {
+      await (_db.update(_db.trackers)..where((t) => t.id.equals(p.id))).write(
+        TrackersCompanion(config: Value(p.config)),
+      );
+    }
+    for (final t in upgrade.newMealChecks(journeyId: journeyId, from: today)) {
+      await trackers.insert(t);
     }
   });
 }

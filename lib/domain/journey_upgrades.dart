@@ -143,7 +143,11 @@ class JourneyUpgrade {
   Tracker? workoutAsYesNo() => workout?.copyWith(
     type: TrackerType.checkbox,
     goal: workoutTracker(at: 0).goal,
-    description: workoutTracker(at: 0).description,
+    // A description the user wrote stays; the old template default goes.
+    description: switch (workout!.description.trim()) {
+      '' || 'What did you train?' => workoutTracker(at: 0).description,
+      final own => own,
+    },
     config: workoutConfig.copyWith(
       placeholder: workout!.config.placeholder.isEmpty
           ? workoutConfig.placeholder
