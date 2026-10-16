@@ -6,6 +6,7 @@ import '../../core/time/day.dart';
 import '../../core/time/time_of_day_x.dart';
 import '../../core/widgets/common.dart';
 import '../../domain/formatting.dart';
+import '../../domain/journey_upgrades.dart';
 import '../../domain/models.dart';
 import '../../domain/tracker_config.dart';
 import '../../domain/tracker_goal.dart';
@@ -355,7 +356,21 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
       );
       await repo.insert(t.copyWith(journeyId: journey.id, activeFrom: from));
     } else {
+      final before = ref.read(trackerByIdProvider(t.id));
       await repo.update(t);
+      // Turned a skip rule off: the dashboard mustn't offer it back as new.
+      if (before?.config.skipRule != null && t.config.skipRule == null) {
+        final settings = ref.read(settingsRepositoryProvider);
+        final s = await settings.load();
+        await settings.save(
+          s.copyWith(
+            dismissedUpgrades: {
+              ...s.dismissedUpgrades,
+              JourneyUpgrade.leftOfficeSkipId,
+            },
+          ),
+        );
+      }
     }
     if (t.reminderEnabled) {
       await ref.read(notificationServiceProvider).requestPermission();
@@ -1398,7 +1413,8 @@ class _SkipRuleEditor extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             rule.whenOptionIds.isEmpty
-                ? 'Pick at least one answer.'
+                ? 'Pick at least one answer — without one, saving turns this '
+                      'off.'
                 : 'On those days it doesn’t count, isn’t pending and doesn’t '
                       'remind you. You can still log it.',
             style: theme.textTheme.bodySmall?.copyWith(

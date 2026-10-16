@@ -102,14 +102,15 @@ class UpgradeRepository {
       final name = JourneyUpgrade.checkNameFor(meal);
       var check = _findCheck(await trackers.forJourney(journeyId), meal, name);
       if (check == null) {
+        final fresh = mealOnTime(
+          JourneyUpgrade.mealNames[meal.name] ?? meal.name,
+          section: meal.section,
+          at: meal.anchorMinutes ?? 12 * 60,
+          icon: meal.icon,
+          placeholder: meal.config.placeholder,
+        );
         final id = await trackers.insert(
-          mealOnTime(
-            JourneyUpgrade.mealNames[meal.name] ?? meal.name,
-            section: meal.section,
-            at: meal.anchorMinutes ?? 12 * 60,
-            icon: meal.icon,
-            placeholder: meal.config.placeholder,
-          ).copyWith(
+          fresh.copyWith(
             journeyId: journeyId,
             activeFrom: today,
             // The meal's schedule and reminder carry over to its check.
@@ -117,6 +118,7 @@ class UpgradeRepository {
             isRequired: meal.isRequired,
             reminderEnabled: meal.reminderEnabled,
             reminderMinutes: () => meal.reminderMinutes,
+            config: fresh.config.copyWith(skipRule: () => meal.config.skipRule),
           ),
         );
         check = (await trackers.forJourney(journeyId))
@@ -136,6 +138,8 @@ class UpgradeRepository {
                 placeholder: meal.config.placeholder.isEmpty
                     ? check.config.placeholder
                     : meal.config.placeholder,
+                // Keep the check's own skip rule; adopt the meal's if none.
+                skipRule: () => check!.config.skipRule ?? meal.config.skipRule,
               ),
             ),
             reminderEnabled: takeReminder

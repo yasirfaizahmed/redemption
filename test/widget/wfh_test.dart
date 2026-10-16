@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:redemption/data/repositories/journey_repository.dart';
+import 'package:redemption/data/repositories/settings_repository.dart';
 import 'package:redemption/data/repositories/tracker_repository.dart';
+import 'package:redemption/domain/journey_upgrades.dart';
 import 'package:redemption/domain/templates.dart';
 import 'package:redemption/features/today/tracker_tile.dart';
 
@@ -91,6 +93,52 @@ void main() {
       RegExp(r'(\d+) left').firstMatch(tester.widget<Text>(nextUp).data!)![1]!,
     );
     expect(after, before - 2, reason: 'WFH answered, Left office not needed');
+  });
+
+  testWidgets('turning the rule off doesn\'t bring it back as "new"', (
+    tester,
+  ) async {
+    usePhoneSurface(tester);
+    final env = await createEnv(tester, template: Templates.redemption);
+    addTearDown(() => disposeEnv(tester, env));
+
+    await tester.pumpWidget(buildApp(env, now: monday));
+    await settle(tester);
+    expect(find.text('New for your journey'), findsNothing);
+    await tester.tap(find.text('Plan').last);
+    await settle(tester);
+    await tester.dragUntilVisible(
+      find.text('Left office'),
+      find.byType(CustomScrollView),
+      const Offset(0, -200),
+    );
+    await tester.tap(find.text('Left office'));
+    await settle(tester);
+    final skipSwitch = find.widgetWithText(
+      SwitchListTile,
+      'Not needed on certain days',
+    );
+    await tester.dragUntilVisible(
+      skipSwitch,
+      find.byType(Scrollable).first,
+      const Offset(0, -200),
+    );
+    await settle(tester);
+    await tester.tap(skipSwitch);
+    await settle(tester);
+    await tester.tap(find.text('Save'));
+    await settle(tester);
+
+    await tester.tap(find.text('Home').last);
+    await settle(tester);
+    expect(find.text('New for your journey'), findsNothing);
+    final settings = (await tester.runAsync(
+      () => SettingsRepository(env.db).load(),
+    ))!;
+    expect(
+      settings.dismissedUpgrades,
+      contains(JourneyUpgrade.leftOfficeSkipId),
+    );
   });
 
   testWidgets('the tracker editor shows and edits the skip rule', (

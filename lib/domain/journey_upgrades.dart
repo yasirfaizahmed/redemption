@@ -205,11 +205,18 @@ class JourneyUpgrade {
   /// counts against them).
   List<Tracker> newMealChecks({required int journeyId, required Day from}) => [
     for (final (meal, name) in meals)
-      mealOnTime(
+      switch (mealOnTime(
         name,
         section: meal.section,
         at: meal.anchorMinutes ?? 12 * 60,
-      ).copyWith(journeyId: journeyId, activeFrom: from),
+      )) {
+        final check => check.copyWith(
+          journeyId: journeyId,
+          activeFrom: from,
+          // Days the meal isn't needed, its check isn't either.
+          config: check.config.copyWith(skipRule: () => meal.config.skipRule),
+        ),
+      },
   ];
 
   /// [prayers] with the office-day rule attached.
@@ -236,6 +243,8 @@ class JourneyUpgrade {
       placeholder: workout!.config.placeholder.isEmpty
           ? workoutConfig.placeholder
           : workout!.config.placeholder,
+      // Days the user said it isn't needed stay that way.
+      skipRule: () => workout!.config.skipRule,
     ),
   );
 }

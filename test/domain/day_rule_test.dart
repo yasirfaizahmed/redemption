@@ -181,6 +181,8 @@ void main() {
         leftOffice.skipReasonOn(on('office'), [workModeWithLeave]),
         isNull,
       );
+      // The answer's option was removed: still skipped, without a label.
+      expect(leftOffice.skipReasonOn(on('leave'), [workMode]), '');
       // An unresolved rule (template) never switches anything off.
       final unresolved = leftOffice.copyWith(
         config: TrackerConfig(skipRule: notAtOfficeSkipRule()),
@@ -560,6 +562,76 @@ void main() {
         );
       },
     );
+
+    test('the older upgrades keep a skip rule set on the trackers they '
+        'change', () async {
+      final dir = await Directory.systemTemp.createTemp('keep');
+      addTearDown(() => dir.delete(recursive: true));
+      await BackupService(db, AttachmentStore(dir)).importBytes(
+        await File('test/fixtures/redemption-backup-v1.0.0.zip').readAsBytes(),
+      );
+      final journey = (await JourneyRepository(db).active())!;
+      final repo = TrackerRepository(db);
+      var trackers = await repo.forJourney(journey.id);
+      final work = trackers.firstWhere((t) => t.name == 'WFH or office?');
+      final rule = SkipRule(whenTrackerId: work.id, whenOptionIds: ['leave']);
+      for (final name in ['Workout', 'Lunch', 'Breakfast']) {
+        final t = trackers.firstWhere((t) => t.name == name);
+        await repo.update(
+          t.copyWith(config: t.config.copyWith(skipRule: () => rule)),
+        );
+      }
+      trackers = await repo.forJourney(journey.id);
+      // With and without the office part (which adds the checks first).
+      final upgrade = JourneyUpgrade.plan(trackers);
+      expect(upgrade.workout, isNotNull);
+      expect(upgrade.hasLeftOfficeSkip, isFalse, reason: 'rules exist');
+      await UpgradeRepository(
+        db,
+      ).apply(upgrade, journeyId: journey.id, today: const Day(2026, 10, 12));
+      trackers = await repo.forJourney(journey.id);
+      for (final name in ['Workout', 'Lunch on time?', 'Breakfast on time?']) {
+        expect(
+          trackers
+              .firstWhere((t) => t.name == name && !t.isArchived)
+              .config
+              .skipRule,
+          rule,
+          reason: name,
+        );
+      }
+    });
+
+    test('meal checks the fold creates take the meal\'s skip rule', () async {
+      final dir = await Directory.systemTemp.createTemp('fold');
+      addTearDown(() => dir.delete(recursive: true));
+      await BackupService(db, AttachmentStore(dir)).importBytes(
+        await File('test/fixtures/redemption-backup-v1.0.0.zip').readAsBytes(),
+      );
+      final journey = (await JourneyRepository(db).active())!;
+      final repo = TrackerRepository(db);
+      var trackers = await repo.forJourney(journey.id);
+      final work = trackers.firstWhere((t) => t.name == 'WFH or office?');
+      final rule = SkipRule(whenTrackerId: work.id, whenOptionIds: ['leave']);
+      final lunch = trackers.firstWhere((t) => t.name == 'Lunch');
+      await repo.update(
+        lunch.copyWith(config: lunch.config.copyWith(skipRule: () => rule)),
+      );
+      trackers = await repo.forJourney(journey.id);
+      final upgrade = JourneyUpgrade.plan(
+        trackers,
+        dismissed: {JourneyUpgrade.officeAndMealsId},
+      );
+      expect(upgrade.meals, isEmpty);
+      await UpgradeRepository(
+        db,
+      ).apply(upgrade, journeyId: journey.id, today: const Day(2026, 10, 12));
+      trackers = await repo.forJourney(journey.id);
+      expect(
+        trackers.firstWhere((t) => t.name == 'Lunch on time?').config.skipRule,
+        rule,
+      );
+    });
 
     test('a v1.0.0 journey can opt in without changing past days', () async {
       final dir = await Directory.systemTemp.createTemp('upg');

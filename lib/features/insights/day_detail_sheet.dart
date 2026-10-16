@@ -96,7 +96,10 @@ class _DayDetail extends ConsumerWidget {
               today,
               sameDay: sameDay,
             );
-            final skipReason = t.skipReasonOn(sameDay, trackers);
+            final skipReason = t.skipReasonOn(
+              sameDay,
+              ref.watch(allTrackersProvider).value ?? const [],
+            );
             return ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 4),
               leading: TrackerAvatar(
@@ -112,7 +115,9 @@ class _DayDetail extends ConsumerWidget {
                     if (!t.isScheduledOn(day))
                       'Not scheduled'
                     else if (skipReason != null)
-                      'Not needed — $skipReason'
+                      skipReason.isEmpty
+                          ? 'Not needed'
+                          : 'Not needed — $skipReason'
                     else
                       'Not logged'
                   else

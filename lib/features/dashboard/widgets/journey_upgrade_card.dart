@@ -138,8 +138,9 @@ class _JourneyUpgradeCardState extends ConsumerState<JourneyUpgradeCard> {
                       '${upgrade.leftOffice!.name}: switches itself off when '
                       'you work from home'
                       '${upgrade.leftOfficeSkip!.whenOptionIds.contains('leave') ? ' or are on leave' : ''}'
-                      ' — no reminder, and it no longer counts against you '
-                      '(past days too).',
+                      ' — no reminder, and those days leave it out of your '
+                      'score, past ones included (whether or not you logged '
+                      'it).',
                 ),
               Wrap(
                 alignment: WrapAlignment.end,

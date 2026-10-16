@@ -182,14 +182,14 @@ class Tracker {
   bool isSkippedOn(Map<int, Entry> sameDay) => skipAnswerOn(sameDay) != null;
 
   /// Why this tracker isn't needed on a day — the answer's label, e.g.
-  /// "Work from home" — or null when it is. [trackers] holds the tracker
-  /// whose answer switched it off.
+  /// "Work from home", or '' when that label is gone — or null when it is
+  /// needed. [trackers] holds the tracker whose answer switched it off.
   String? skipReasonOn(Map<int, Entry> sameDay, Iterable<Tracker> trackers) {
     final answer = skipAnswerOn(sameDay);
     if (answer == null) return null;
     final whenId = config.skipRule!.whenTrackerId;
     final when = trackers.where((t) => t.id == whenId).firstOrNull;
-    return when?.config.optionById(answer)?.label ?? 'Not needed';
+    return when?.config.optionById(answer)?.label ?? '';
   }
 
   bool isScheduledOn(Day day) => Weekdays.has(weekdays, day.weekday);

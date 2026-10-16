@@ -159,13 +159,14 @@ class NotificationService {
                 location: tz.local,
               )
             : null;
-        for (final slot in slotsFor(
+        final slots = slotsFor(
           trackerId: t.id,
           weekdays: t.weekdays,
           minutes: at,
           now: now,
           skipAt: skipAt,
-        )) {
+        );
+        for (final slot in slots) {
           await _schedule(
             slot,
             title: t.name,
@@ -176,7 +177,9 @@ class NotificationService {
           );
           count++;
         }
-        if (skipAt != null) _log.info('Reminder for ${t.id} skipped today');
+        if (slots.any((s) => s.repeat == null)) {
+          _log.info('Today’s reminder for tracker ${t.id} skipped');
+        }
       }
       if (settings.checkInEnabled) {
         await _schedule(

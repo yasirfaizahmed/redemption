@@ -568,6 +568,7 @@ class _UnscheduledState extends State<_Unscheduled> {
                 leading: TrackerAvatar(tracker: t, size: 36),
                 title: Text(t.name),
                 subtitle: Text(switch (widget.skipReasons[t.id]) {
+                  '' => 'Not needed',
                   final reason? => 'Not needed — $reason',
                   null => widget.isToday ? 'Optional today' : 'Optional',
                 }),

@@ -10,8 +10,9 @@ the GitHub release, and the app shows it under “What’s new” before updatin
   the timeline for the day: it doesn’t count against your score, isn’t waiting
   in *Next up* and doesn’t send its reminder. It sits under “Not needed today”,
   so you can still log it if you want.
-- Existing journeys: the dashboard offers to add this to your “Left office”
-  (past work-from-home days stop counting against it too).
+- Existing journeys: the dashboard offers to add this to your “Left office”.
+  Past work-from-home days then leave it out of the score too, whether or not
+  you logged it, so a few past scores can shift slightly.
 - Any tracker can be *not needed on certain days* — pick a choice tracker and
   the answers that switch it off (tracker editor, under *Repeat on*).
 

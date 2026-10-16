@@ -206,7 +206,9 @@ class _EntrySheetState extends ConsumerState<EntrySheet> {
               const SizedBox(height: 12),
               _Banner(
                 icon: Icons.event_busy_rounded,
-                text: 'Not needed on this day ($reason) — logging is optional.',
+                text: reason.isEmpty
+                    ? 'Not needed on this day — logging is optional.'
+                    : 'Not needed on this day ($reason) — logging is optional.',
               ),
             ],
             if (tracker.ruleOn(index.forDay(widget.day)) case final rule?
