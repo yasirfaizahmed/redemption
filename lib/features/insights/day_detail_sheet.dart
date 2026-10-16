@@ -88,13 +88,15 @@ class _DayDetail extends ConsumerWidget {
         for (final t in trackers)
           () {
             final entry = index.get(t.id, day);
+            final sameDay = index.forDay(day);
             final status = scoring.status(
               t,
               entry,
               day,
               today,
-              sameDay: index.forDay(day),
+              sameDay: sameDay,
             );
+            final skipReason = t.skipReasonOn(sameDay, trackers);
             return ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 4),
               leading: TrackerAvatar(
@@ -107,7 +109,12 @@ class _DayDetail extends ConsumerWidget {
               subtitle: Text(
                 [
                   if (entry == null || entry.value.isEmpty)
-                    t.isScheduledOn(day) ? 'Not logged' : 'Not scheduled'
+                    if (!t.isScheduledOn(day))
+                      'Not scheduled'
+                    else if (skipReason != null)
+                      'Not needed — $skipReason'
+                    else
+                      'Not logged'
                   else
                     Fmt.value(t, entry.value, use24h: use24h),
                   if (entry != null && entry.note.isNotEmpty) '“${entry.note}”',

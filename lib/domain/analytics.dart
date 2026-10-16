@@ -139,8 +139,10 @@ class TrackerStats {
   }) {
     final entries = index.forTracker(tracker.id);
     var planned = 0;
+    // Days a skip rule switched off (e.g. work from home) aren't planned;
+    // future days have no answers yet, so they all count as planned.
     for (final d in Day.range(journey.startDay, journey.endDay)) {
-      if (tracker.isExpectedOn(d)) planned++;
+      if (tracker.isExpectedOn(d, sameDay: index.forDay(d))) planned++;
     }
 
     var expected = 0;
@@ -150,9 +152,10 @@ class TrackerStats {
     final last = today.isBefore(journey.endDay) ? today : journey.endDay;
     if (!today.isBefore(journey.startDay)) {
       for (final d in Day.range(journey.startDay, last)) {
-        if (!tracker.isExpectedOn(d)) continue;
+        final sameDay = index.forDay(d);
+        if (!tracker.isExpectedOn(d, sameDay: sameDay)) continue;
         final e = entries[d];
-        final p = scoring.progress(tracker, e?.value, sameDay: index.forDay(d));
+        final p = scoring.progress(tracker, e?.value, sameDay: sameDay);
         final complete = Scoring.isComplete(p);
         if (d == today && !complete) continue; // today still in progress
         expected++;

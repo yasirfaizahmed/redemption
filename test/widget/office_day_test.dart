@@ -103,6 +103,13 @@ void main() {
     );
 
     expect(find.textContaining('What did you eat?'), findsOneWidget);
+    expect(
+      find.textContaining(
+        'Left office: switches itself off when you work from home or are on '
+        'leave',
+      ),
+      findsOneWidget,
+    );
     await tester.ensureVisible(find.text('Add to my journey'));
     await settle(tester);
     await tester.tap(find.text('Add to my journey'));
@@ -130,6 +137,10 @@ void main() {
     expect(
       trackers.firstWhere((t) => t.name == 'Lunch on time?').config.notePrompt,
       'What did you eat?',
+    );
+    expect(
+      trackers.firstWhere((t) => t.name == 'Left office').config.skipRule,
+      isNotNull,
     );
   });
 }

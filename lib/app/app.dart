@@ -96,17 +96,12 @@ class _RedemptionAppState extends ConsumerState<RedemptionApp> {
     }
   }
 
-  /// Reschedules reminders whenever trackers or reminder settings change.
+  /// Reschedules reminders whenever trackers, reminder settings or today's
+  /// skips (e.g. "Left office" on a work-from-home day) change.
   void _scheduleReminderSync() {
     _syncDebounce?.cancel();
     _syncDebounce = Timer(const Duration(milliseconds: 800), () {
-      final trackers = ref.read(activeTrackersProvider);
-      final settings = ref.read(settingsValueProvider);
-      unawaited(
-        ref
-            .read(notificationServiceProvider)
-            .sync(trackers: trackers, settings: settings),
-      );
+      unawaited(ref.read(reminderSyncProvider)());
     });
   }
 
@@ -116,10 +111,15 @@ class _RedemptionAppState extends ConsumerState<RedemptionApp> {
       activeTrackersProvider,
       (_, _) => _scheduleReminderSync(),
     );
-    ref.listen<(bool, int, bool)>(
+    ref.listen<(bool, int, bool, int)>(
       settingsValueProvider.select(
-        (s) => (s.checkInEnabled, s.checkInMinutes, s.use24h),
+        (s) =>
+            (s.checkInEnabled, s.checkInMinutes, s.use24h, s.dayStartMinutes),
       ),
+      (_, _) => _scheduleReminderSync(),
+    );
+    ref.listen<String>(
+      reminderSkipKeyProvider,
       (_, _) => _scheduleReminderSync(),
     );
 

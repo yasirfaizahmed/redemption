@@ -261,6 +261,11 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
           if (o.label.text.trim().isNotEmpty) o.toOption(),
       ],
     );
+    // A skip rule needs a tracker and at least one of its answers.
+    if (config.skipRule case final rule?
+        when !rule.isResolved || rule.whenOptionIds.isEmpty) {
+      config = config.copyWith(skipRule: () => null);
+    }
     // A day rule only keeps references to options that still exist.
     if (config.dayRule case final rule?) {
       final ids = {for (final o in config.options) o.id};
@@ -642,6 +647,20 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
                 value: _countFromStart,
                 onChanged: (v) => setState(() => _countFromStart = v),
               ),
+            _SkipRuleEditor(
+              rule: draft.config.skipRule,
+              candidates: [
+                for (final other in ref.watch(activeTrackersProvider))
+                  if (other.id != draft.id &&
+                      other.type == TrackerType.singleChoice &&
+                      other.config.options.isNotEmpty)
+                    other,
+              ],
+              onChanged: (rule) => _update(
+                (d) =>
+                    d.copyWith(config: d.config.copyWith(skipRule: () => rule)),
+              ),
+            ),
 
             SectionHeader(
               '${draft.type.label} setup',
@@ -1295,6 +1314,105 @@ Day trackerStartDay({
   required Day journeyStart,
   required bool fromStart,
 }) => fromStart || today.isBefore(journeyStart) ? journeyStart : today;
+
+/// "Not needed on certain days": when another choice tracker has one of the
+/// picked answers, this tracker is switched off for the day (e.g. "Left
+/// office" on work-from-home days). Any tracker type.
+class _SkipRuleEditor extends StatelessWidget {
+  const _SkipRuleEditor({
+    required this.rule,
+    required this.candidates,
+    required this.onChanged,
+  });
+
+  final SkipRule? rule;
+
+  /// Choice trackers whose answer can switch this one off.
+  final List<Tracker> candidates;
+  final ValueChanged<SkipRule?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final rule = this.rule;
+    if (candidates.isEmpty && rule == null) return const SizedBox.shrink();
+    final when = candidates
+        .where((c) => c.id == rule?.whenTrackerId)
+        .firstOrNull;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Not needed on certain days'),
+          subtitle: const Text(
+            'e.g. “Left office” isn’t needed when you work from home',
+          ),
+          value: rule != null,
+          onChanged: candidates.isEmpty && rule == null
+              ? null
+              : (v) => onChanged(
+                  v ? SkipRule(whenTrackerId: candidates.first.id) : null,
+                ),
+        ),
+        if (rule != null) ...[
+          DropdownButtonFormField<int>(
+            key: ValueKey('skip-when-${rule.whenTrackerId}'),
+            initialValue: when?.id,
+            decoration: const InputDecoration(labelText: 'When'),
+            hint: const Text('Pick a tracker'),
+            items: [
+              for (final c in candidates)
+                DropdownMenuItem(value: c.id, child: Text(c.name)),
+            ],
+            onChanged: (id) {
+              if (id == null || id == rule.whenTrackerId) return;
+              onChanged(rule.copyWith(whenTrackerId: id, whenOptionIds: []));
+            },
+          ),
+          if (when != null) ...[
+            const SizedBox(height: 12),
+            Text('is any of', style: theme.textTheme.titleSmall),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final o in when.config.options)
+                  FilterChip(
+                    label: Text(o.display),
+                    selected: rule.whenOptionIds.contains(o.id),
+                    onSelected: (v) => onChanged(
+                      rule.copyWith(
+                        whenOptionIds: [
+                          for (final id in rule.whenOptionIds)
+                            if (id != o.id) id,
+                          if (v) o.id,
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 8),
+          Text(
+            rule.whenOptionIds.isEmpty
+                ? 'Pick at least one answer.'
+                : 'On those days it doesn’t count, isn’t pending and doesn’t '
+                      'remind you. You can still log it.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: rule.whenOptionIds.isEmpty
+                  ? theme.colorScheme.error
+                  : theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+}
 
 /// "Different on certain days": when another choice tracker has a given
 /// answer, give some options full marks, hide some from the one-tap row and

@@ -66,6 +66,7 @@ Future<void> seedDemoJourney(
     bool hit() => rnd.nextDouble() < p;
     String pick(List<String> l) => l[rnd.nextInt(l.length)];
 
+    String? workMode;
     for (final t in trackers) {
       if (!t.isScheduledOn(d)) continue;
       if (isToday && (t.anchorMinutes ?? 0) > nowMinutes) continue;
@@ -83,10 +84,14 @@ Future<void> seedDemoJourney(
         ),
         'Breakfast' => TextValue(pick(breakfasts)),
         'WFH or office?' => ChoiceValue(
-          rnd.nextDouble() < 0.6 ? 'wfh' : 'office',
+          workMode = rnd.nextDouble() < 0.6 ? 'wfh' : 'office',
         ),
         'Lunch' => TextValue(pick(lunches)),
-        'Left office' => TimeValue(16 * 60 + 15 + rnd.nextInt(55)),
+        // Only office days (the time is drawn anyway, keeping the sequence).
+        'Left office' => switch (TimeValue(16 * 60 + 15 + rnd.nextInt(55))) {
+          final v when workMode == 'office' => v,
+          _ => null,
+        },
         'Pre-workout meal' => BoolValue(hit()),
         'Workout' => hit() ? TextValue(pick(workouts)) : null,
         'Post-workout dinner' => TextValue(pick(dinners)),

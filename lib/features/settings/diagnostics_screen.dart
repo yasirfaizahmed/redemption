@@ -172,12 +172,7 @@ class _DiagnosticsScreenState extends ConsumerState<DiagnosticsScreen> {
             children: [
               OutlinedButton.icon(
                 onPressed: () async {
-                  await ref
-                      .read(notificationServiceProvider)
-                      .sync(
-                        trackers: ref.read(activeTrackersProvider),
-                        settings: ref.read(settingsValueProvider),
-                      );
+                  await ref.read(reminderSyncProvider)();
                   ref.invalidate(_diagnosticsProvider);
                   if (context.mounted) {
                     showSnack(context, 'Reminders rescheduled');

@@ -149,6 +149,61 @@ class DayRule {
   );
 }
 
+/// Switches a tracker off for the day when another choice tracker has one
+/// of the given answers — e.g. "Left office" isn't needed on work-from-home
+/// or leave days. That day the tracker isn't expected: it doesn't count,
+/// isn't pending and doesn't remind (logging it stays possible, optional).
+@immutable
+class SkipRule {
+  const SkipRule({
+    this.whenTrackerId = 0,
+    this.whenRef = '',
+    this.whenOptionIds = const [],
+  });
+
+  factory SkipRule.fromJson(Map<String, dynamic> json) => SkipRule(
+    whenTrackerId: (json['when'] as num?)?.toInt() ?? 0,
+    whenOptionIds: switch (json['is']) {
+      final List<dynamic> ids => [for (final id in ids) '$id'],
+      final String id => [id],
+      _ => const [],
+    },
+  );
+
+  /// The tracker whose answer switches this one off (0 until resolved).
+  final int whenTrackerId;
+
+  /// In templates: the template ref of that tracker, resolved to
+  /// [whenTrackerId] when a journey is created. Never stored.
+  final String whenRef;
+
+  /// Answers of that tracker on which this one isn't needed.
+  final List<String> whenOptionIds;
+
+  bool get isResolved => whenTrackerId > 0;
+
+  SkipRule copyWith({int? whenTrackerId, List<String>? whenOptionIds}) =>
+      SkipRule(
+        whenTrackerId: whenTrackerId ?? this.whenTrackerId,
+        whenRef: whenRef,
+        whenOptionIds: whenOptionIds ?? this.whenOptionIds,
+      );
+
+  Map<String, dynamic> toJson() => {'when': whenTrackerId, 'is': whenOptionIds};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SkipRule &&
+      other.whenTrackerId == whenTrackerId &&
+      const ListEquality<String>().equals(other.whenOptionIds, whenOptionIds);
+
+  @override
+  int get hashCode => Object.hash(
+    whenTrackerId,
+    const ListEquality<String>().hash(whenOptionIds),
+  );
+}
+
 enum NumberInputStyle { stepper, slider }
 
 enum RatingStyle { stars, emoji, scale }
@@ -175,6 +230,7 @@ class TrackerConfig {
     this.noLabel = 'No',
     this.maxAttachments = 4,
     this.dayRule,
+    this.skipRule,
     this.notePrompt = '',
     this.noteIsInfoOnly = false,
   });
@@ -211,6 +267,9 @@ class TrackerConfig {
     dayRule: json['dayRule'] is Map<String, dynamic>
         ? DayRule.fromJson(json['dayRule'] as Map<String, dynamic>)
         : null,
+    skipRule: json['skipRule'] is Map<String, dynamic>
+        ? SkipRule.fromJson(json['skipRule'] as Map<String, dynamic>)
+        : null,
     notePrompt: json['notePrompt'] as String? ?? '',
     noteIsInfoOnly: json['noteInfoOnly'] as bool? ?? false,
   );
@@ -246,6 +305,9 @@ class TrackerConfig {
   /// Choice trackers: how they change on certain days (see [DayRule]).
   final DayRule? dayRule;
 
+  /// Days on which the tracker isn't needed (see [SkipRule]). Any type.
+  final SkipRule? skipRule;
+
   /// When set, the entry sheet opens with a comment box asking this
   /// (e.g. "What did you train?"), and the timeline shows the comment.
   final String notePrompt;
@@ -277,6 +339,7 @@ class TrackerConfig {
     String? noLabel,
     int? maxAttachments,
     DayRule? Function()? dayRule,
+    SkipRule? Function()? skipRule,
     String? notePrompt,
     bool? noteIsInfoOnly,
   }) => TrackerConfig(
@@ -297,6 +360,7 @@ class TrackerConfig {
     noLabel: noLabel ?? this.noLabel,
     maxAttachments: maxAttachments ?? this.maxAttachments,
     dayRule: dayRule != null ? dayRule() : this.dayRule,
+    skipRule: skipRule != null ? skipRule() : this.skipRule,
     notePrompt: notePrompt ?? this.notePrompt,
     noteIsInfoOnly: noteIsInfoOnly ?? this.noteIsInfoOnly,
   );
@@ -319,6 +383,8 @@ class TrackerConfig {
     'noLabel': noLabel,
     'maxAttachments': maxAttachments,
     if (dayRule case final rule? when rule.isResolved) 'dayRule': rule.toJson(),
+    if (skipRule case final rule? when rule.isResolved)
+      'skipRule': rule.toJson(),
     if (notePrompt.isNotEmpty) 'notePrompt': notePrompt,
     if (noteIsInfoOnly) 'noteInfoOnly': true,
   };

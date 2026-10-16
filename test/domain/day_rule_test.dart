@@ -11,6 +11,7 @@ import 'package:redemption/data/repositories/journey_repository.dart';
 import 'package:redemption/data/repositories/tracker_repository.dart';
 import 'package:redemption/data/repositories/upgrade_repository.dart';
 import 'package:redemption/data/storage/attachment_store.dart';
+import 'package:redemption/domain/analytics.dart';
 import 'package:redemption/domain/journey_upgrades.dart';
 import 'package:redemption/domain/models.dart';
 import 'package:redemption/domain/scoring.dart';
@@ -22,10 +23,10 @@ import 'package:redemption/domain/tracker_value.dart';
 
 const day = Day(2026, 10, 12);
 
-Entry entry(int trackerId, TrackerValue v) => Entry(
-  id: trackerId,
+Entry entry(int trackerId, TrackerValue v, {Day on = day}) => Entry(
+  id: trackerId * 1000 + on.difference(day),
   trackerId: trackerId,
-  day: day,
+  day: on,
   value: v,
   updatedAt: DateTime(2026),
 );
@@ -115,6 +116,168 @@ void main() {
     });
   });
 
+  // Not needed when working from home or on leave.
+  final leftOffice = Tracker(
+    id: 3,
+    journeyId: 1,
+    name: 'Left office',
+    type: TrackerType.time,
+    icon: 'logout',
+    color: 0,
+    activeFrom: day,
+    config: TrackerConfig(skipRule: notAtOfficeSkipRule(whenTrackerId: 1)),
+  );
+  final workModeWithLeave = workMode.copyWith(
+    config: TrackerConfig(
+      options: [
+        ...workMode.config.options,
+        const ChoiceOption(id: 'leave', label: 'Leave / holiday'),
+      ],
+    ),
+  );
+
+  group('SkipRule', () {
+    test('round-trips through JSON; unresolved template rules are not '
+        'stored; older configs load without one', () {
+      final json = leftOffice.config.toJson();
+      expect(json['skipRule'], {
+        'when': 1,
+        'is': ['wfh', 'leave'],
+      });
+      final back = TrackerConfig.fromJson(json);
+      expect(back.skipRule, leftOffice.config.skipRule);
+      expect(back, leftOffice.config);
+      expect(
+        TrackerConfig(skipRule: notAtOfficeSkipRule()).toJson(),
+        isNot(contains('skipRule')),
+      );
+      expect(TrackerConfig.fromJson(const {}).skipRule, isNull);
+      // A single answer written as a string still loads.
+      expect(SkipRule.fromJson(const {'when': 4, 'is': 'wfh'}).whenOptionIds, [
+        'wfh',
+      ]);
+      // The day rule and the skip rule are independent.
+      final both = dhuhr.config.copyWith(
+        skipRule: () => const SkipRule(whenTrackerId: 1, whenOptionIds: ['x']),
+      );
+      expect(TrackerConfig.fromJson(both.toJson()), both);
+    });
+
+    test('switches the tracker off only on the picked answers', () {
+      Map<int, Entry> on(String mode) => {1: entry(1, ChoiceValue(mode))};
+      expect(leftOffice.isSkippedOn(on('wfh')), isTrue);
+      expect(leftOffice.isSkippedOn(on('leave')), isTrue);
+      expect(leftOffice.isSkippedOn(on('office')), isFalse);
+      expect(leftOffice.isSkippedOn(const {}), isFalse, reason: 'unanswered');
+      expect(leftOffice.skipAnswerOn(on('wfh')), 'wfh');
+      expect(leftOffice.isExpectedOn(day, sameDay: on('wfh')), isFalse);
+      expect(leftOffice.isExpectedOn(day, sameDay: on('office')), isTrue);
+      expect(leftOffice.countsOn(day, sameDay: on('wfh')), isFalse);
+      expect(
+        leftOffice.skipReasonOn(on('leave'), [workModeWithLeave, leftOffice]),
+        'Leave / holiday',
+      );
+      expect(
+        leftOffice.skipReasonOn(on('office'), [workModeWithLeave]),
+        isNull,
+      );
+      // An unresolved rule (template) never switches anything off.
+      final unresolved = leftOffice.copyWith(
+        config: TrackerConfig(skipRule: notAtOfficeSkipRule()),
+      );
+      expect(unresolved.isSkippedOn(on('wfh')), isFalse);
+    });
+
+    test('a skipped day is not pending, not missed and not scored', () {
+      final wfh = {1: entry(1, const ChoiceValue('wfh'))};
+      final office = {1: entry(1, const ChoiceValue('office'))};
+      final tomorrow = day.addDays(1);
+      expect(
+        scoring.status(leftOffice, null, day, day, sameDay: wfh),
+        EntryStatus.notExpected,
+      );
+      expect(
+        scoring.status(leftOffice, null, day, tomorrow, sameDay: wfh),
+        EntryStatus.notExpected,
+        reason: 'a past WFH day is not missed',
+      );
+      expect(
+        scoring.status(leftOffice, null, day, day, sameDay: office),
+        EntryStatus.pending,
+      );
+      expect(
+        scoring.status(leftOffice, null, day, tomorrow, sameDay: office),
+        EntryStatus.missed,
+      );
+      expect(
+        scoring.status(leftOffice, null, day, day),
+        EntryStatus.pending,
+        reason: 'needed until the work mode is answered',
+      );
+
+      final trackers = [workMode, leftOffice];
+      final wfhDay = scoring.summarize(day, trackers, EntryIndex(wfh.values));
+      expect(wfhDay.expected, 1, reason: 'only "WFH or office?" counts');
+      expect(wfhDay.score, 1);
+      final officeDay = scoring.summarize(
+        day,
+        trackers,
+        EntryIndex(office.values),
+      );
+      expect(officeDay.expected, 2);
+      expect(officeDay.score, 0.5);
+      // Logged anyway on a WFH day: kept, but it doesn't count.
+      final logged = scoring.summarize(
+        day,
+        trackers,
+        EntryIndex([...wfh.values, entry(3, const TimeValue(17 * 60))]),
+      );
+      expect(logged.expected, 1);
+      expect(
+        scoring.status(
+          leftOffice,
+          entry(3, const TimeValue(17 * 60)),
+          day,
+          day,
+          sameDay: wfh,
+        ),
+        EntryStatus.done,
+      );
+    });
+
+    test('tracker stats leave skipped days out of planned days, success '
+        'and streaks', () {
+      final journey = Journey(
+        id: 1,
+        name: '90',
+        intention: '',
+        startDay: day,
+        durationDays: 10,
+        isActive: true,
+        createdAt: DateTime(2026),
+      );
+      // Office, WFH (not logged), office — the streak holds.
+      final index = EntryIndex([
+        entry(1, const ChoiceValue('office')),
+        entry(3, const TimeValue(17 * 60)),
+        entry(1, const ChoiceValue('wfh'), on: day.addDays(1)),
+        entry(1, const ChoiceValue('office'), on: day.addDays(2)),
+        entry(3, const TimeValue(17 * 60), on: day.addDays(2)),
+      ]);
+      final s = TrackerStats.compute(
+        tracker: leftOffice,
+        journey: journey,
+        index: index,
+        today: day.addDays(3),
+        scoring: scoring,
+      );
+      expect(s.expectedDays, 2);
+      expect(s.doneDays, 2);
+      expect(s.currentStreak, 2);
+      expect(s.plannedDays, 9, reason: '10 days minus the WFH day');
+    });
+  });
+
   group('journeys', () {
     late AppDatabase db;
     setUp(
@@ -176,6 +339,13 @@ void main() {
       expect(workout.type, TrackerType.checkbox);
       expect(workout.config.notePrompt, 'What did you train?');
       expect(workout.isRequired, isTrue);
+      // Left office isn't needed when working from home or on leave.
+      final leftOffice = trackers.firstWhere((t) => t.name == 'Left office');
+      expect(leftOffice.config.skipRule?.whenTrackerId, work.id);
+      expect(leftOffice.config.skipRule?.whenOptionIds, ['wfh', 'leave']);
+      for (final id in leftOffice.config.skipRule!.whenOptionIds) {
+        expect(work.config.optionById(id), isNotNull, reason: id);
+      }
       expect(JourneyUpgrade.plan(trackers).isEmpty, isTrue);
       // Removing one of the additions doesn't bring the offer back.
       await TrackerRepository(db)
@@ -362,7 +532,34 @@ void main() {
       final work = copied.firstWhere((t) => t.name == 'WFH or office?');
       final asr = copied.firstWhere((t) => t.name == 'Asr');
       expect(asr.config.dayRule?.whenTrackerId, work.id);
+      final leftOffice = copied.firstWhere((t) => t.name == 'Left office');
+      expect(leftOffice.config.skipRule?.whenTrackerId, work.id);
+      expect(leftOffice.config.skipRule?.whenOptionIds, ['wfh', 'leave']);
     });
+
+    test(
+      'a skip rule on an archived tracker is dropped when copying',
+      () async {
+        final old = await create();
+        final repo = TrackerRepository(db);
+        final work = old.firstWhere((t) => t.name == 'WFH or office?');
+        await repo.archive(work.id, day.addDays(5));
+        final newId = await JourneyRepository(db).createFromExisting(
+          copyFrom: old.first.journeyId,
+          name: 'Round 2',
+          intention: '',
+          startDay: day.addDays(90),
+          durationDays: 90,
+        );
+        final copied = await repo.forJourney(newId);
+        final leftOffice = copied.firstWhere((t) => t.name == 'Left office');
+        expect(leftOffice.config.skipRule, isNull);
+        expect(
+          copied.firstWhere((t) => t.name == 'Asr').config.dayRule,
+          isNull,
+        );
+      },
+    );
 
     test('a v1.0.0 journey can opt in without changing past days', () async {
       final dir = await Directory.systemTemp.createTemp('upg');
@@ -386,7 +583,9 @@ void main() {
         JourneyUpgrade.officeAndMealsId,
         JourneyUpgrade.workoutId,
         JourneyUpgrade.mealCommentsId,
+        JourneyUpgrade.leftOfficeSkipId,
       });
+      expect(upgrade.leftOffice?.name, 'Left office');
       expect(upgrade.mealTexts.map((t) => t.name), [
         'Breakfast',
         'Lunch',
@@ -456,6 +655,16 @@ void main() {
         (t) => t.name == 'Breakfast on time?',
       );
       expect(breakfastCheck.activeFrom, today);
+
+      // Left office: not needed when working from home or on leave.
+      final work = trackers.firstWhere((t) => t.name == 'WFH or office?');
+      final leftOffice = trackers.firstWhere((t) => t.name == 'Left office');
+      expect(leftOffice.config.skipRule?.whenTrackerId, work.id);
+      expect(leftOffice.config.skipRule?.whenOptionIds, [
+        for (final id in ['wfh', 'leave'])
+          if (work.config.optionById(id) != null) id,
+      ]);
+      expect(leftOffice.config.skipRule?.whenOptionIds, contains('wfh'));
 
       final now = EntryIndex(
         await EntryRepository(db).watchForJourney(journey.id).first,

@@ -187,6 +187,38 @@ final entryIndexProvider = Provider<EntryIndex>((ref) {
   return entries == null ? EntryIndex.empty : EntryIndex(entries);
 });
 
+/// Active trackers a skip rule switches off today (e.g. "Left office" once
+/// "WFH or office?" says Work from home), sorted by id.
+final skippedTodayProvider = Provider<List<int>>((ref) {
+  final sameDay = ref
+      .watch(entryIndexProvider)
+      .forDay(ref.watch(todayProvider));
+  return [
+    for (final t in ref.watch(activeTrackersProvider))
+      if (t.isSkippedOn(sameDay)) t.id,
+  ]..sort();
+});
+
+/// Changes when today's skips change, or the day does — reminders resync.
+final reminderSkipKeyProvider = Provider<String>(
+  (ref) =>
+      '${ref.watch(todayProvider)}:${ref.watch(skippedTodayProvider).join(',')}',
+);
+
+/// Reschedules every reminder from the current trackers and settings,
+/// leaving out today's for trackers switched off today.
+final reminderSyncProvider = Provider<Future<void> Function()>(
+  (ref) =>
+      () => ref
+          .read(notificationServiceProvider)
+          .sync(
+            trackers: ref.read(activeTrackersProvider),
+            settings: ref.read(settingsValueProvider),
+            today: ref.read(todayProvider),
+            skippedToday: ref.read(skippedTodayProvider).toSet(),
+          ),
+);
+
 final dashboardItemsProvider = StreamProvider<List<DashboardItem>>((ref) {
   final id = ref.watch(_activeJourneyIdProvider);
   if (id == null) return Stream.value(const []);

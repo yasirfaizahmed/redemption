@@ -2,17 +2,22 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart'
+    hide Day;
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:logging/logging.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
+import '../core/time/day.dart';
 import '../domain/app_settings.dart';
 import '../domain/formatting.dart';
 import '../domain/models.dart';
 
 final _log = Logger('Notifications');
+
+/// One scheduled reminder: repeating daily or weekly, or once ([repeat] null).
+typedef ReminderSlot = ({int id, tz.TZDateTime at, DateTimeComponents? repeat});
 
 /// Local reminders. Everything is scheduled on-device; nothing needs a server.
 class NotificationService {
@@ -123,15 +128,22 @@ class NotificationService {
   }
 
   /// Re-creates every scheduled reminder from the current trackers/settings.
+  ///
+  /// [skippedToday] holds trackers a skip rule switched off on [today]
+  /// (e.g. "Left office" on a work-from-home day): today's reminder is left
+  /// out and that slot fires again a week later.
   Future<void> sync({
     required List<Tracker> trackers,
     required AppSettings settings,
+    Day? today,
+    Set<int> skippedToday = const {},
   }) async {
     if (!_ready) return;
     try {
       // Only scheduled reminders: an "update ready" notice on screen stays.
       await _plugin.cancelAllPendingNotifications();
       final mode = await _scheduleMode();
+      final now = tz.TZDateTime.now(tz.local);
       var count = 0;
       for (final t in trackers) {
         final at = t.reminderMinutes ?? t.anchorMinutes;
@@ -139,40 +151,42 @@ class NotificationService {
         final body = t.description.isNotEmpty
             ? t.description
             : 'Goal: ${Fmt.goal(t, use24h: settings.use24h)}. Every rep rewires.';
-        if (t.weekdays == Weekdays.all) {
+        final skipAt = today != null && skippedToday.contains(t.id)
+            ? occurrenceOn(
+                today,
+                at,
+                dayStartMinutes: settings.dayStartMinutes,
+                location: tz.local,
+              )
+            : null;
+        for (final slot in slotsFor(
+          trackerId: t.id,
+          weekdays: t.weekdays,
+          minutes: at,
+          now: now,
+          skipAt: skipAt,
+        )) {
           await _schedule(
-            id: _trackerBase + t.id * 10,
+            slot,
             title: t.name,
             body: body,
-            minutes: at,
             payload: 'tracker:${t.id}',
             mode: mode,
             channel: _reminderChannel,
           );
           count++;
-        } else {
-          for (var wd = 1; wd <= 7; wd++) {
-            if (!Weekdays.has(t.weekdays, wd)) continue;
-            await _schedule(
-              id: _trackerBase + t.id * 10 + wd,
-              title: t.name,
-              body: body,
-              minutes: at,
-              weekday: wd,
-              payload: 'tracker:${t.id}',
-              mode: mode,
-              channel: _reminderChannel,
-            );
-            count++;
-          }
         }
+        if (skipAt != null) _log.info('Reminder for ${t.id} skipped today');
       }
       if (settings.checkInEnabled) {
         await _schedule(
-          id: checkInId,
+          (
+            id: checkInId,
+            at: nextInstance(settings.checkInMinutes, now: now),
+            repeat: DateTimeComponents.time,
+          ),
           title: 'Evening check-in',
           body: 'Log what’s left for today. Never miss twice.',
-          minutes: settings.checkInMinutes,
           payload: 'today',
           mode: mode,
           channel: _checkInChannel,
@@ -260,26 +274,86 @@ class NotificationService {
     iOS: const DarwinNotificationDetails(),
   );
 
-  Future<void> _schedule({
-    required int id,
+  Future<void> _schedule(
+    ReminderSlot slot, {
     required String title,
     required String body,
-    required int minutes,
     required String payload,
     required AndroidScheduleMode mode,
     required ({String id, String name, String description}) channel,
-    int? weekday,
   }) => _plugin.zonedSchedule(
-    id: id,
+    id: slot.id,
     title: title,
     body: body,
-    scheduledDate: nextInstance(minutes, weekday: weekday),
+    scheduledDate: slot.at,
     notificationDetails: _details(channel),
     androidScheduleMode: mode,
     payload: payload,
-    matchDateTimeComponents: weekday == null
-        ? DateTimeComponents.time
-        : DateTimeComponents.dayOfWeekAndTime,
+    matchDateTimeComponents: slot.repeat,
+  );
+
+  /// The reminders of one tracker at [minutes] on its [weekdays]: one daily
+  /// repeat, or a weekly repeat per weekday.
+  ///
+  /// When [skipAt] is the next time a slot would fire (the tracker isn't
+  /// needed today), that slot fires once, a week later, instead — the next
+  /// sync (any app start or change) makes it repeat again.
+  static List<ReminderSlot> slotsFor({
+    required int trackerId,
+    required int weekdays,
+    required int minutes,
+    required tz.TZDateTime now,
+    tz.TZDateTime? skipAt,
+  }) {
+    final base = _trackerBase + trackerId * 10;
+    bool skips(tz.TZDateTime at) =>
+        skipAt != null && at.isAtSameMomentAs(skipAt);
+    if (weekdays == Weekdays.all) {
+      final next = nextInstance(minutes, now: now);
+      if (!skips(next)) {
+        return [(id: base, at: next, repeat: DateTimeComponents.time)];
+      }
+    }
+    return [
+      for (var wd = 1; wd <= 7; wd++)
+        if (Weekdays.has(weekdays, wd))
+          switch (nextInstance(minutes, weekday: wd, now: now)) {
+            final next when skips(next) => (
+              id: base + wd,
+              at: tz.TZDateTime(
+                next.location,
+                next.year,
+                next.month,
+                next.day + 7,
+                next.hour,
+                next.minute,
+              ),
+              repeat: null,
+            ),
+            final next => (
+              id: base + wd,
+              at: next,
+              repeat: DateTimeComponents.dayOfWeekAndTime,
+            ),
+          },
+    ];
+  }
+
+  /// When a reminder at [minutes] fires for the logical [day]: on its date,
+  /// or on the next one for a time before the day starts (01:00 belongs to
+  /// the night before when days start at 04:00).
+  static tz.TZDateTime occurrenceOn(
+    Day day,
+    int minutes, {
+    required int dayStartMinutes,
+    required tz.Location location,
+  }) => tz.TZDateTime(
+    location,
+    day.year,
+    day.month,
+    day.day + (minutes < dayStartMinutes ? 1 : 0),
+    minutes ~/ 60,
+    minutes % 60,
   );
 
   /// Next occurrence of [minutes] past midnight (optionally on an ISO

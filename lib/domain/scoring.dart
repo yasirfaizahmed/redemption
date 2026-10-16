@@ -21,7 +21,8 @@ enum EntryStatus {
   /// Expected on a past day and never logged.
   missed,
 
-  /// Not scheduled / not active on that day.
+  /// Not scheduled / not active on that day, or switched off by a skip
+  /// rule (e.g. "Left office" on a work-from-home day).
   notExpected,
 }
 
@@ -104,7 +105,9 @@ class Scoring {
     Map<int, Entry> sameDay = const {},
   }) {
     final logged = entry != null && !entry.value.isEmpty;
-    if (!tracker.isExpectedOn(day) && !logged) return EntryStatus.notExpected;
+    if (!tracker.isExpectedOn(day, sameDay: sameDay) && !logged) {
+      return EntryStatus.notExpected;
+    }
     if (!logged) {
       return day.isBefore(today) ? EntryStatus.missed : EntryStatus.pending;
     }
@@ -122,7 +125,7 @@ class Scoring {
     var logged = 0;
     final entries = index.forDay(day);
     for (final t in trackers) {
-      if (!t.countsOn(day)) continue;
+      if (!t.countsOn(day, sameDay: entries)) continue;
       expected++;
       final e = entries[t.id];
       if (e == null || e.value.isEmpty) continue;

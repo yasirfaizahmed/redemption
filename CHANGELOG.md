@@ -3,6 +3,18 @@
 Every release's notes come from its section below: CI copies the section into
 the GitHub release, and the app shows it under “What’s new” before updating.
 
+## 1.4.0
+
+- **Work from home? “Left office” switches itself off.** Answer “WFH or
+  office?” with *Work from home* (or *Leave / holiday*) and “Left office” leaves
+  the timeline for the day: it doesn’t count against your score, isn’t waiting
+  in *Next up* and doesn’t send its reminder. It sits under “Not needed today”,
+  so you can still log it if you want.
+- Existing journeys: the dashboard offers to add this to your “Left office”
+  (past work-from-home days stop counting against it too).
+- Any tracker can be *not needed on certain days* — pick a choice tracker and
+  the answers that switch it off (tracker editor, under *Repeat on*).
+
 ## 1.3.0
 
 - **Meals: on time earns the points, what you ate is just for your notes.**

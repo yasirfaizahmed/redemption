@@ -198,6 +198,16 @@ class _EntrySheetState extends ConsumerState<EntrySheet> {
                 icon: Icons.event_busy_rounded,
                 text: 'Not scheduled on this day — logging is optional.',
               ),
+            ] else if (tracker.skipReasonOn(
+                  index.forDay(widget.day),
+                  ref.watch(allTrackersProvider).value ?? const [],
+                )
+                case final reason?) ...[
+              const SizedBox(height: 12),
+              _Banner(
+                icon: Icons.event_busy_rounded,
+                text: 'Not needed on this day ($reason) — logging is optional.',
+              ),
             ],
             if (tracker.ruleOn(index.forDay(widget.day)) case final rule?
                 when rule.label.isNotEmpty) ...[

@@ -131,6 +131,16 @@ class _JourneyUpgradeCardState extends ConsumerState<JourneyUpgradeCard> {
                       'points; the separate meal entries stop counting from '
                       'today and keep their history.',
                 ),
+              if (upgrade.hasLeftOfficeSkip)
+                _Point(
+                  icon: Icons.home_work_outlined,
+                  text:
+                      '${upgrade.leftOffice!.name}: switches itself off when '
+                      'you work from home'
+                      '${upgrade.leftOfficeSkip!.whenOptionIds.contains('leave') ? ' or are on leave' : ''}'
+                      ' — no reminder, and it no longer counts against you '
+                      '(past days too).',
+                ),
               Wrap(
                 alignment: WrapAlignment.end,
                 spacing: 8,

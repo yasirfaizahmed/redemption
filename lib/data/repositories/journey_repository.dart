@@ -84,12 +84,22 @@ class JourneyRepository {
           .into(_db.trackers)
           .insert(tracker.toCompanion());
     }
-    // Day rules reference other trackers by template ref: resolve them now.
+    // Day and skip rules reference other trackers by template ref: resolve
+    // them now.
     for (final tt in template.trackers) {
-      final rule = tt.tracker.config.dayRule;
-      final whenId = refToId[rule?.whenRef];
-      if (rule == null || whenId == null) continue;
-      await _setDayRule(refToId[tt.ref]!, rule.copyWith(whenTrackerId: whenId));
+      final config = tt.tracker.config;
+      final dayWhen = refToId[config.dayRule?.whenRef];
+      final skipWhen = refToId[config.skipRule?.whenRef];
+      if (dayWhen == null && skipWhen == null) continue;
+      await _setRules(
+        refToId[tt.ref]!,
+        dayRule: dayWhen == null
+            ? null
+            : () => config.dayRule!.copyWith(whenTrackerId: dayWhen),
+        skipRule: skipWhen == null
+            ? null
+            : () => config.skipRule!.copyWith(whenTrackerId: skipWhen),
+      );
     }
     for (final (i, w) in template.widgets.indexed) {
       final ids = [
@@ -115,7 +125,12 @@ class JourneyRepository {
     return journeyId;
   });
 
-  Future<void> _setDayRule(int trackerId, DayRule? rule) async {
+  /// Replaces the rules given (a null function leaves that rule as is).
+  Future<void> _setRules(
+    int trackerId, {
+    DayRule? Function()? dayRule,
+    SkipRule? Function()? skipRule,
+  }) async {
     final row = await (_db.select(
       _db.trackers,
     )..where((t) => t.id.equals(trackerId))).getSingle();
@@ -123,7 +138,9 @@ class JourneyRepository {
       _db.trackers,
     )..where((t) => t.id.equals(trackerId))).write(
       TrackersCompanion(
-        config: Value(row.config.copyWith(dayRule: () => rule)),
+        config: Value(
+          row.config.copyWith(dayRule: dayRule, skipRule: skipRule),
+        ),
       ),
     );
   }
@@ -156,14 +173,27 @@ class JourneyRepository {
       );
       idMap[row.id] = await _db.into(_db.trackers).insert(t.toCompanion());
     }
-    // Point copied day rules at the copies of the trackers they watch.
+    // Point copied day and skip rules at the copies of the trackers they
+    // watch (a rule whose tracker wasn't copied is dropped).
     for (final row in trackers) {
-      final rule = row.toDomain().config.dayRule;
-      if (rule == null) continue;
-      final whenId = idMap[rule.whenTrackerId];
-      await _setDayRule(
+      final config = row.toDomain().config;
+      final dayRule = config.dayRule;
+      final skipRule = config.skipRule;
+      if (dayRule == null && skipRule == null) continue;
+      final dayWhen = idMap[dayRule?.whenTrackerId];
+      final skipWhen = idMap[skipRule?.whenTrackerId];
+      await _setRules(
         idMap[row.id]!,
-        whenId == null ? null : rule.copyWith(whenTrackerId: whenId),
+        dayRule: dayRule == null
+            ? null
+            : () => dayWhen == null
+                  ? null
+                  : dayRule.copyWith(whenTrackerId: dayWhen),
+        skipRule: skipRule == null
+            ? null
+            : () => skipWhen == null
+                  ? null
+                  : skipRule.copyWith(whenTrackerId: skipWhen),
       );
     }
     final items = await (_db.select(

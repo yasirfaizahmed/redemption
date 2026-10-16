@@ -86,13 +86,19 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       for (final t in allTrackers)
         if (t.isActiveOn(day)) t,
     ];
+    // A skip rule switches a tracker off for the day (e.g. "Left office"
+    // once "WFH or office?" says Work from home): it leaves the timeline.
+    final sameDay = ref.watch(entryIndexProvider).forDay(day);
+    final skipReasons = {
+      for (final t in visible) t.id: ?t.skipReasonOn(sameDay, allTrackers),
+    };
     final expected = [
       for (final t in visible)
-        if (t.isScheduledOn(day)) t,
+        if (t.isScheduledOn(day) && !skipReasons.containsKey(t.id)) t,
     ];
     final unscheduled = [
       for (final t in visible)
-        if (!t.isScheduledOn(day)) t,
+        if (!t.isScheduledOn(day) || skipReasons.containsKey(t.id)) t,
     ];
 
     final title = day == today
@@ -186,7 +192,12 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 ),
                 if (unscheduled.isNotEmpty)
                   SliverToBoxAdapter(
-                    child: _Unscheduled(trackers: unscheduled, day: day),
+                    child: _Unscheduled(
+                      trackers: unscheduled,
+                      day: day,
+                      isToday: day == today,
+                      skipReasons: skipReasons,
+                    ),
                   ),
                 const SliverToBoxAdapter(child: SizedBox(height: 32)),
               ],
@@ -513,10 +524,19 @@ class _DayHeader extends StatelessWidget {
   }
 }
 
+/// Trackers not needed on the day: not scheduled, or switched off by a
+/// skip rule (with the answer that did it, e.g. "Work from home").
 class _Unscheduled extends StatefulWidget {
-  const _Unscheduled({required this.trackers, required this.day});
+  const _Unscheduled({
+    required this.trackers,
+    required this.day,
+    required this.isToday,
+    this.skipReasons = const {},
+  });
   final List<Tracker> trackers;
   final Day day;
+  final bool isToday;
+  final Map<int, String> skipReasons;
 
   @override
   State<_Unscheduled> createState() => _UnscheduledState();
@@ -533,7 +553,10 @@ class _UnscheduledState extends State<_Unscheduled> {
         children: [
           ListTile(
             leading: const Icon(Icons.event_busy_rounded),
-            title: Text('Not scheduled today (${widget.trackers.length})'),
+            title: Text(
+              '${widget.isToday ? 'Not needed today' : 'Not needed this day'} '
+              '(${widget.trackers.length})',
+            ),
             trailing: Icon(
               _open ? Icons.expand_less_rounded : Icons.expand_more_rounded,
             ),
@@ -544,7 +567,10 @@ class _UnscheduledState extends State<_Unscheduled> {
               ListTile(
                 leading: TrackerAvatar(tracker: t, size: 36),
                 title: Text(t.name),
-                subtitle: const Text('Optional today'),
+                subtitle: Text(switch (widget.skipReasons[t.id]) {
+                  final reason? => 'Not needed — $reason',
+                  null => widget.isToday ? 'Optional today' : 'Optional',
+                }),
                 onTap: () =>
                     showEntrySheet(context, trackerId: t.id, day: widget.day),
               ),

@@ -167,17 +167,45 @@ class Tracker {
     ),
   );
 
+  /// The answer that switches this tracker off on a day (e.g. "wfh" when
+  /// "WFH or office?" says Work from home), given [sameDay], all entries of
+  /// that day — or null when it's needed. See [SkipRule].
+  String? skipAnswerOn(Map<int, Entry> sameDay) {
+    final rule = config.skipRule;
+    if (rule == null || !rule.isResolved) return null;
+    final v = sameDay[rule.whenTrackerId]?.value;
+    return v is ChoiceValue && rule.whenOptionIds.contains(v.optionId)
+        ? v.optionId
+        : null;
+  }
+
+  bool isSkippedOn(Map<int, Entry> sameDay) => skipAnswerOn(sameDay) != null;
+
+  /// Why this tracker isn't needed on a day — the answer's label, e.g.
+  /// "Work from home" — or null when it is. [trackers] holds the tracker
+  /// whose answer switched it off.
+  String? skipReasonOn(Map<int, Entry> sameDay, Iterable<Tracker> trackers) {
+    final answer = skipAnswerOn(sameDay);
+    if (answer == null) return null;
+    final whenId = config.skipRule!.whenTrackerId;
+    final when = trackers.where((t) => t.id == whenId).firstOrNull;
+    return when?.config.optionById(answer)?.label ?? 'Not needed';
+  }
+
   bool isScheduledOn(Day day) => Weekdays.has(weekdays, day.weekday);
 
   bool isActiveOn(Day day) =>
       day.isSameOrAfter(activeFrom) &&
       (archivedOn == null || day.isBefore(archivedOn!));
 
-  /// Expected on [day] (active and scheduled).
-  bool isExpectedOn(Day day) => isActiveOn(day) && isScheduledOn(day);
+  /// Expected on [day]: active, scheduled, and not switched off by a
+  /// [SkipRule] given [sameDay] (all entries of that day).
+  bool isExpectedOn(Day day, {required Map<int, Entry> sameDay}) =>
+      isActiveOn(day) && isScheduledOn(day) && !isSkippedOn(sameDay);
 
   /// Expected on [day] and counts towards the daily score.
-  bool countsOn(Day day) => isRequired && isExpectedOn(day);
+  bool countsOn(Day day, {required Map<int, Entry> sameDay}) =>
+      isRequired && isExpectedOn(day, sameDay: sameDay);
 
   Tracker copyWith({
     int? id,

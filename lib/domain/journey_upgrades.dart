@@ -3,10 +3,13 @@ import 'package:collection/collection.dart';
 import '../core/time/day.dart';
 import 'models.dart';
 import 'templates.dart';
+import 'tracker_config.dart';
 import 'tracker_type.dart';
 
 /// Improvements made to the Redemption template after v1.0.0 that an
-/// existing journey can opt into, without touching its scores.
+/// existing journey can opt into. Past scores stay as they were, except
+/// where the fix is the point (e.g. "Left office" stops counting against
+/// work-from-home days).
 ///
 /// Each part has its own id, so declining or applying one never hides a
 /// part added in a later version.
@@ -17,6 +20,8 @@ class JourneyUpgrade {
     this.meals = const [],
     this.workout,
     this.mealTexts = const [],
+    this.leftOffice,
+    this.leftOfficeSkip,
   });
 
   /// Office-day prayers + meal on-time checks (v1.1.0).
@@ -27,6 +32,12 @@ class JourneyUpgrade {
 
   /// Meal text entries folded into the on-time checks as info (v1.3.0).
   static const mealCommentsId = 'meal-comments';
+
+  /// "Left office" not needed when working from home or on leave (v1.4.0).
+  static const leftOfficeSkipId = 'left-office-skip';
+
+  /// Trackers a skip rule is offered for, by name.
+  static const notAtOfficeTrackers = {'Left office'};
 
   /// Prayers checked against [workMode] on office days.
   static const officePrayers = {'Dhuhr', 'Asr', 'Maghrib'};
@@ -56,15 +67,26 @@ class JourneyUpgrade {
   /// so only eating on time earns points.
   final List<Tracker> mealTexts;
 
+  /// A "Left office" tracker that isn't needed on [leftOfficeSkip] days.
+  final Tracker? leftOffice;
+
+  /// The rule it gets: work from home / leave on the work-mode tracker.
+  final SkipRule? leftOfficeSkip;
+
   bool get hasOfficeAndMeals => prayers.isNotEmpty || meals.isNotEmpty;
+  bool get hasLeftOfficeSkip => leftOffice != null && leftOfficeSkip != null;
   bool get isEmpty =>
-      !hasOfficeAndMeals && workout == null && mealTexts.isEmpty;
+      !hasOfficeAndMeals &&
+      workout == null &&
+      mealTexts.isEmpty &&
+      !hasLeftOfficeSkip;
 
   /// Ids of the parts this upgrade contains.
   Set<String> get ids => {
     if (hasOfficeAndMeals) officeAndMealsId,
     if (workout != null) workoutId,
     if (mealTexts.isNotEmpty) mealCommentsId,
+    if (hasLeftOfficeSkip) leftOfficeSkipId,
   };
 
   /// Name of the on-time check a meal text tracker folds into.
@@ -134,14 +156,50 @@ class JourneyUpgrade {
                 t,
           ];
 
+    // Left office: only while no tracker has a skip rule (journeys from
+    // the v1.4+ template ship one, and anyone who set rules up knows them).
+    Tracker? leftOffice;
+    SkipRule? leftOfficeSkip;
+    if (!dismissed.contains(leftOfficeSkipId) &&
+        !trackers.any((t) => t.config.skipRule != null)) {
+      leftOffice = active.firstWhereOrNull(
+        (t) => notAtOfficeTrackers.contains(t.name),
+      );
+      final mode = active.firstWhereOrNull(
+        (t) =>
+            t.type == TrackerType.singleChoice &&
+            t.config.optionById('wfh') != null,
+      );
+      if (leftOffice != null && mode != null) {
+        leftOfficeSkip = notAtOfficeSkipRule(
+          whenTrackerId: mode.id,
+          whenOptionIds: [
+            for (final id in notAtOfficeSkipRule().whenOptionIds)
+              if (mode.config.optionById(id) != null) id,
+          ],
+        );
+      } else {
+        leftOffice = null;
+      }
+    }
+
     return JourneyUpgrade(
       workMode: workMode,
       prayers: prayers,
       meals: meals,
       workout: workout,
       mealTexts: mealTexts,
+      leftOffice: leftOffice,
+      leftOfficeSkip: leftOfficeSkip,
     );
   }
+
+  /// [leftOffice] with its skip rule attached.
+  Tracker? leftOfficeWithSkip() => !hasLeftOfficeSkip
+      ? null
+      : leftOffice!.copyWith(
+          config: leftOffice!.config.copyWith(skipRule: () => leftOfficeSkip),
+        );
 
   /// The "on time?" trackers to add, starting [from] (so no past day
   /// counts against them).

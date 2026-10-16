@@ -69,6 +69,10 @@ class UpgradeRepository {
         TrackersCompanion(config: Value(p.config)),
       );
     }
+    if (upgrade.leftOfficeWithSkip() case final leftOffice?) {
+      await (_db.update(_db.trackers)..where((t) => t.id.equals(leftOffice.id)))
+          .write(TrackersCompanion(config: Value(leftOffice.config)));
+    }
     for (final t in upgrade.newMealChecks(journeyId: journeyId, from: today)) {
       await trackers.insert(t);
     }

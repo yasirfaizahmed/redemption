@@ -41,12 +41,16 @@ class TrackerTile extends ConsumerWidget {
       entryIndexProvider.select((i) => i.get(tracker.id, day)),
     );
     final scoring = ref.watch(scoringProvider);
-    // The entry a day rule depends on (e.g. "WFH or office?"), if any.
+    // The entries the day and skip rules depend on (e.g. "WFH or office?").
     final ruleId = tracker.config.dayRule?.whenTrackerId ?? 0;
     final ruleEntry = ruleId == 0
         ? null
         : ref.watch(entryIndexProvider.select((i) => i.get(ruleId, day)));
-    final sameDay = {ruleId: ?ruleEntry};
+    final skipId = tracker.config.skipRule?.whenTrackerId ?? 0;
+    final skipEntry = skipId == 0
+        ? null
+        : ref.watch(entryIndexProvider.select((i) => i.get(skipId, day)));
+    final sameDay = {ruleId: ?ruleEntry, skipId: ?skipEntry};
     final rule = tracker.ruleOn(sameDay);
     final status = scoring.status(tracker, entry, day, today, sameDay: sameDay);
     final statusColor = Palette.forStatus(status, scheme);

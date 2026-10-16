@@ -119,6 +119,18 @@ DayRule officeDayRule({String whenRef = 'workmode', int whenTrackerId = 0}) =>
       credits: const {'ontime': 1},
     );
 
+/// Not at the office (working from home or on leave): "Left office" isn't
+/// needed that day.
+SkipRule notAtOfficeSkipRule({
+  String whenRef = 'workmode',
+  int whenTrackerId = 0,
+  List<String> whenOptionIds = const ['wfh', 'leave'],
+}) => SkipRule(
+  whenRef: whenRef,
+  whenTrackerId: whenTrackerId,
+  whenOptionIds: whenOptionIds,
+);
+
 /// Did you train? A win earns full points; the comment records what you did.
 Tracker workoutTracker({required int at, String section = 'Evening'}) => _t(
   name: 'Workout',
@@ -251,6 +263,7 @@ abstract final class Templates {
           section: 'Day',
           at: _hm(16, 30),
           weekdays: Weekdays.workweek,
+          config: TrackerConfig(skipRule: notAtOfficeSkipRule()),
         ),
       ),
       TemplateTracker(

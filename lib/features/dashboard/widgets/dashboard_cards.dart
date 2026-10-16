@@ -342,11 +342,13 @@ class NextUpCard extends ConsumerWidget {
     final now = ref.watch(clockProvider);
     final settings = ref.watch(settingsValueProvider);
     final index = ref.watch(entryIndexProvider);
+    final sameDay = index.forDay(today);
     final pending = [
       for (final t in ref.watch(activeTrackersProvider))
-        // A comment without an answer (e.g. "What did you eat?") is pending.
-        if (t.isExpectedOn(today) &&
-            (index.get(t.id, today)?.value.isEmpty ?? true))
+        // A comment without an answer (e.g. "What did you eat?") is pending;
+        // a tracker switched off today (e.g. work from home) is not.
+        if (t.isExpectedOn(today, sameDay: sameDay) &&
+            (sameDay[t.id]?.value.isEmpty ?? true))
           t,
     ];
     if (pending.isEmpty) {
