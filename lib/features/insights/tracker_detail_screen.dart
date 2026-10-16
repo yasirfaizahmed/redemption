@@ -265,7 +265,9 @@ class _TrackerDetailScreenState extends ConsumerState<TrackerDetailScreen> {
             ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 4),
               title: Text(
-                Fmt.value(tracker, e.value, use24h: use24h),
+                e.value.isEmpty
+                    ? 'No answer'
+                    : Fmt.value(tracker, e.value, use24h: use24h),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -280,7 +282,9 @@ class _TrackerDetailScreenState extends ConsumerState<TrackerDetailScreen> {
               leading: Icon(
                 Icons.circle,
                 size: 12,
-                color: _statusColor(ref, tracker, e),
+                color: e.value.isEmpty
+                    ? Theme.of(context).colorScheme.outline
+                    : _statusColor(ref, tracker, e),
               ),
               onTap: () =>
                   showEntrySheet(context, trackerId: tracker.id, day: e.day),

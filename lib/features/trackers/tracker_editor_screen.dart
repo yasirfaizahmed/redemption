@@ -783,16 +783,22 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
             'Ask for a comment (optional)',
             hint: 'What did you train?',
           ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('The comment is just for information'),
-            subtitle: Text(
-              _noteInfoOnly
-                  ? 'Only the answer earns points (e.g. “What did you eat?”)'
-                  : 'A comment on its own counts as the win',
-            ),
-            value: _noteInfoOnly,
-            onChanged: (v) => setState(() => _noteInfoOnly = v),
+          ListenableBuilder(
+            listenable: _notePrompt,
+            builder: (context, _) => _notePrompt.text.trim().isEmpty
+                ? const SizedBox.shrink()
+                : SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('The comment is just for information'),
+                    subtitle: Text(
+                      _noteInfoOnly
+                          ? 'Only the answer earns points (e.g. “What did you eat?”)'
+                          : 'Answering the comment without picking an answer '
+                                'counts as the win',
+                    ),
+                    value: _noteInfoOnly,
+                    onChanged: (v) => setState(() => _noteInfoOnly = v),
+                  ),
           ),
         ];
       case TrackerType.singleChoice || TrackerType.multiChoice:

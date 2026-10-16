@@ -344,7 +344,10 @@ class NextUpCard extends ConsumerWidget {
     final index = ref.watch(entryIndexProvider);
     final pending = [
       for (final t in ref.watch(activeTrackersProvider))
-        if (t.isExpectedOn(today) && index.get(t.id, today) == null) t,
+        // A comment without an answer (e.g. "What did you eat?") is pending.
+        if (t.isExpectedOn(today) &&
+            (index.get(t.id, today)?.value.isEmpty ?? true))
+          t,
     ];
     if (pending.isEmpty) {
       return AppCard(

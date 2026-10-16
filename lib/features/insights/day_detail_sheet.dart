@@ -105,12 +105,13 @@ class _DayDetail extends ConsumerWidget {
               ),
               title: Text(t.name),
               subtitle: Text(
-                entry == null
-                    ? (t.isScheduledOn(day) ? 'Not logged' : 'Not scheduled')
-                    : [
-                        Fmt.value(t, entry.value, use24h: use24h),
-                        if (entry.note.isNotEmpty) '“${entry.note}”',
-                      ].join('\n'),
+                [
+                  if (entry == null || entry.value.isEmpty)
+                    t.isScheduledOn(day) ? 'Not logged' : 'Not scheduled'
+                  else
+                    Fmt.value(t, entry.value, use24h: use24h),
+                  if (entry != null && entry.note.isNotEmpty) '“${entry.note}”',
+                ].join('\n'),
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
               ),

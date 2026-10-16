@@ -53,6 +53,15 @@ void main() {
       findsOneWidget,
     );
 
+    // The dashboard's "Next up" still counts the unanswered check.
+    String nextUp() =>
+        tester.widgetList<Text>(find.textContaining('left today')).single.data!;
+    await tester.tap(find.text('Home').last);
+    await settle(tester);
+    final pendingWithComment = nextUp();
+    await tester.tap(find.text('Today').last);
+    await settle(tester);
+
     // Eating on time is what earns the points; the info stays.
     await tester.tap(
       find.descendant(of: tile, matching: find.byTooltip('Mark On time')),
@@ -65,5 +74,10 @@ void main() {
       find.descendant(of: tile, matching: find.text('On time — Rice, dal')),
       findsOneWidget,
     );
+    await tester.tap(find.text('Home').last);
+    await settle(tester);
+    int left(String title) =>
+        int.parse(RegExp(r'(\d+) left today').firstMatch(title)![1]!);
+    expect(left(nextUp()), left(pendingWithComment) - 1);
   });
 }

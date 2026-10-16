@@ -256,6 +256,59 @@ void main() {
       expect(JourneyUpgrade.plan(trackers).mealTexts, isEmpty);
     });
 
+    test(
+      'a renamed check is found, and a meal reminder carries over',
+      () async {
+        final dir = await Directory.systemTemp.createTemp('meal2');
+        addTearDown(() => dir.delete(recursive: true));
+        await BackupService(db, AttachmentStore(dir)).importBytes(
+          await File('test/fixtures/redemption-backup-v1.0.0.zip')
+              .readAsBytes(),
+        );
+        final journey = (await JourneyRepository(db).active())!;
+        final repo = TrackerRepository(db);
+        final upgrades = UpgradeRepository(db);
+        await upgrades.apply(
+          JourneyUpgrade.plan(
+            await repo.forJourney(journey.id),
+            dismissed: const {
+              JourneyUpgrade.workoutId,
+              JourneyUpgrade.mealCommentsId,
+            },
+          ),
+          journeyId: journey.id,
+          today: journey.startDay,
+        );
+        var trackers = await repo.forJourney(journey.id);
+        final check = trackers.firstWhere((t) => t.name == 'Lunch on time?');
+        await repo.update(check.copyWith(name: 'Had lunch on time?'));
+        final lunch = trackers.firstWhere((t) => t.name == 'Lunch');
+        await repo.update(
+          lunch.copyWith(reminderEnabled: true, reminderMinutes: () => 13 * 60),
+        );
+
+        await upgrades.apply(
+          JourneyUpgrade.plan(
+            await repo.forJourney(journey.id),
+            dismissed: const {JourneyUpgrade.workoutId},
+          ),
+          journeyId: journey.id,
+          today: journey.startDay.addDays(3),
+        );
+        trackers = await repo.forJourney(journey.id);
+        expect(
+          trackers.where((t) => t.name.contains('unch on time')),
+          hasLength(1),
+          reason: 'no duplicate check',
+        );
+        final renamed = trackers.firstWhere((t) => t.id == check.id);
+        expect(renamed.name, 'Had lunch on time?');
+        expect(renamed.config.notePrompt, 'What did you eat?');
+        expect(renamed.reminderEnabled, isTrue);
+        expect(renamed.reminderMinutes, 13 * 60);
+      },
+    );
+
     test('a description the user wrote survives the workout switch', () {
       const own = Tracker(
         id: 7,

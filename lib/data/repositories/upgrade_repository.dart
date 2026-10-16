@@ -3,7 +3,10 @@ import 'package:logging/logging.dart';
 
 import '../../core/time/day.dart';
 import '../../domain/journey_upgrades.dart';
+import '../../domain/models.dart';
 import '../../domain/templates.dart';
+import '../../domain/tracker_goal.dart';
+import '../../domain/tracker_type.dart';
 import '../../domain/tracker_value.dart';
 import '../db/database.dart';
 import 'entry_repository.dart';
@@ -93,9 +96,7 @@ class UpgradeRepository {
     final entries = EntryRepository(_db);
     for (final meal in upgrade.mealTexts) {
       final name = JourneyUpgrade.checkNameFor(meal);
-      var check = (await trackers.forJourney(journeyId))
-          .where((t) => t.name == name && !t.isArchived)
-          .firstOrNull;
+      var check = _findCheck(await trackers.forJourney(journeyId), meal, name);
       if (check == null) {
         final id = await trackers.insert(
           mealOnTime(
@@ -104,11 +105,21 @@ class UpgradeRepository {
             at: meal.anchorMinutes ?? 12 * 60,
             icon: meal.icon,
             placeholder: meal.config.placeholder,
-          ).copyWith(journeyId: journeyId, activeFrom: today),
+          ).copyWith(
+            journeyId: journeyId,
+            activeFrom: today,
+            // The meal's schedule and reminder carry over to its check.
+            weekdays: meal.weekdays,
+            isRequired: meal.isRequired,
+            reminderEnabled: meal.reminderEnabled,
+            reminderMinutes: () => meal.reminderMinutes,
+          ),
         );
         check = (await trackers.forJourney(journeyId))
             .firstWhere((t) => t.id == id);
       } else {
+        // Keep the check's own reminder; adopt the meal's if it has none.
+        final takeReminder = !check.reminderEnabled && meal.reminderEnabled;
         await (_db.update(
           _db.trackers,
         )..where((t) => t.id.equals(check!.id))).write(
@@ -123,6 +134,12 @@ class UpgradeRepository {
                     : meal.config.placeholder,
               ),
             ),
+            reminderEnabled: takeReminder
+                ? const Value(true)
+                : const Value.absent(),
+            reminderMinutes: takeReminder
+                ? Value(meal.reminderMinutes ?? meal.anchorMinutes)
+                : const Value.absent(),
           ),
         );
       }
@@ -161,5 +178,31 @@ class UpgradeRepository {
       await trackers.archive(meal.id, today);
       _log.info('${meal.name} folded into $name ($moved entries moved)');
     }
+  }
+
+  /// The meal's on-time check: by its usual name, else by what it is (a
+  /// Yes/No "On time"/"Late" check at the meal's time or in its section),
+  /// so a check the user renamed is still found.
+  static Tracker? _findCheck(List<Tracker> all, Tracker meal, String name) {
+    final candidates = [
+      for (final t in all)
+        if (!t.isArchived && t.id != meal.id) t,
+    ];
+    final byName = candidates.where((t) => t.name == name).firstOrNull;
+    if (byName != null) return byName;
+    bool looksLikeCheck(Tracker t) =>
+        t.type == TrackerType.checkbox &&
+        t.goal is BoolGoal &&
+        t.config.yesLabel == 'On time' &&
+        t.config.noLabel == 'Late';
+    final checks = candidates.where(looksLikeCheck).toList();
+    return checks
+            .where(
+              (t) =>
+                  t.anchorMinutes != null &&
+                  t.anchorMinutes == meal.anchorMinutes,
+            )
+            .firstOrNull ??
+        checks.where((t) => t.section == meal.section).singleOrNull;
   }
 }
