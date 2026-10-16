@@ -102,6 +102,9 @@ void main() {
       findsOneWidget,
     );
 
+    expect(find.textContaining('What did you eat?'), findsOneWidget);
+    await tester.ensureVisible(find.text('Add to my journey'));
+    await settle(tester);
     await tester.tap(find.text('Add to my journey'));
     await settle(tester, rounds: 12);
 
@@ -121,6 +124,12 @@ void main() {
     expect(
       trackers.firstWhere((t) => t.name == 'Workout').type,
       TrackerType.checkbox,
+    );
+    // Meal texts stop counting; the on-time checks carry what was eaten.
+    expect(trackers.firstWhere((t) => t.name == 'Lunch').isArchived, isTrue);
+    expect(
+      trackers.firstWhere((t) => t.name == 'Lunch on time?').config.notePrompt,
+      'What did you eat?',
     );
   });
 }

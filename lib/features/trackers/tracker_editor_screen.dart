@@ -71,6 +71,7 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
   Tracker? _draft;
   int _entryCount = 0;
   bool _countFromStart = false;
+  bool _noteInfoOnly = false;
   bool _saving = false;
 
   final _name = TextEditingController();
@@ -154,6 +155,7 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
     _yes.text = c.yesLabel;
     _no.text = c.noLabel;
     _notePrompt.text = c.notePrompt;
+    _noteInfoOnly = c.noteIsInfoOnly;
     for (final o in _options) {
       o.dispose();
     }
@@ -253,6 +255,7 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
       yesLabel: _yes.text.trim().isEmpty ? 'Yes' : _yes.text.trim(),
       noLabel: _no.text.trim().isEmpty ? 'No' : _no.text.trim(),
       notePrompt: type == TrackerType.checkbox ? _notePrompt.text.trim() : '',
+      noteIsInfoOnly: type == TrackerType.checkbox && _noteInfoOnly,
       options: [
         for (final o in _options)
           if (o.label.text.trim().isNotEmpty) o.toOption(),
@@ -779,6 +782,17 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
             _notePrompt,
             'Ask for a comment (optional)',
             hint: 'What did you train?',
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('The comment is just for information'),
+            subtitle: Text(
+              _noteInfoOnly
+                  ? 'Only the answer earns points (e.g. “What did you eat?”)'
+                  : 'A comment on its own counts as the win',
+            ),
+            value: _noteInfoOnly,
+            onChanged: (v) => setState(() => _noteInfoOnly = v),
           ),
         ];
       case TrackerType.singleChoice || TrackerType.multiChoice:

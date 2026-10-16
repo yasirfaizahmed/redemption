@@ -139,18 +139,32 @@ const workoutConfig = TrackerConfig(
   placeholder: 'Push day: bench 4×8, OHP 3×10, dips…',
 );
 
-/// "Had it on time?" for a meal; counts towards the daily score.
-Tracker mealOnTime(String meal, {required String section, required int at}) =>
-    _t(
-      name: '$meal on time?',
-      type: TrackerType.checkbox,
-      icon: 'clock',
-      color: 0xFFF97316,
-      section: section,
-      at: at,
-      config: const TrackerConfig(yesLabel: 'On time', noLabel: 'Late'),
-      goal: const BoolGoal(),
-    );
+/// "Had it on time?" for a meal: eating on time earns the points, and
+/// "What did you eat?" is kept as information only.
+Tracker mealOnTime(
+  String meal, {
+  required String section,
+  required int at,
+  String icon = 'clock',
+  String placeholder = '',
+}) => _t(
+  name: '$meal on time?',
+  type: TrackerType.checkbox,
+  icon: icon,
+  color: 0xFFF97316,
+  section: section,
+  at: at,
+  config: mealConfig(placeholder: placeholder),
+  goal: const BoolGoal(),
+);
+
+TrackerConfig mealConfig({String placeholder = ''}) => TrackerConfig(
+  yesLabel: 'On time',
+  noLabel: 'Late',
+  notePrompt: 'What did you eat?',
+  noteIsInfoOnly: true,
+  placeholder: placeholder,
+);
 
 abstract final class Templates {
   static final redemption = JourneyTemplate(
@@ -184,20 +198,14 @@ abstract final class Templates {
         _prayer('Fajr', 'twilight', _hm(5, 0), 'Morning'),
       ),
       TemplateTracker(
-        'breakfast',
-        _t(
-          name: 'Breakfast',
-          type: TrackerType.longText,
-          icon: 'breakfast',
-          color: 0xFFF97316,
+        'breakfast_ontime',
+        mealOnTime(
+          'Breakfast',
           section: 'Morning',
           at: _hm(7, 30),
-          config: const TrackerConfig(placeholder: 'Oats, eggs, dates…'),
+          icon: 'breakfast',
+          placeholder: 'Oats, eggs, dates…',
         ),
-      ),
-      TemplateTracker(
-        'breakfast_ontime',
-        mealOnTime('Breakfast', section: 'Morning', at: _hm(7, 30)),
       ),
       TemplateTracker(
         'workmode',
@@ -224,20 +232,14 @@ abstract final class Templates {
         _prayer('Dhuhr', 'sunny', _hm(13, 15), 'Day', rule: officeDayRule()),
       ),
       TemplateTracker(
-        'lunch',
-        _t(
-          name: 'Lunch',
-          type: TrackerType.longText,
-          icon: 'lunch',
-          color: 0xFFF97316,
+        'lunch_ontime',
+        mealOnTime(
+          'Lunch',
           section: 'Day',
           at: _hm(13, 45),
-          config: const TrackerConfig(placeholder: 'Rice, dal, chicken…'),
+          icon: 'lunch',
+          placeholder: 'Rice, dal, chicken…',
         ),
-      ),
-      TemplateTracker(
-        'lunch_ontime',
-        mealOnTime('Lunch', section: 'Day', at: _hm(13, 45)),
       ),
       TemplateTracker(
         'leftoffice',
@@ -280,20 +282,14 @@ abstract final class Templates {
       ),
       TemplateTracker('workout', workoutTracker(at: _hm(19, 0))),
       TemplateTracker(
-        'dinner',
-        _t(
-          name: 'Post-workout dinner',
-          type: TrackerType.longText,
-          icon: 'dinner',
-          color: 0xFFF97316,
+        'dinner_ontime',
+        mealOnTime(
+          'Dinner',
           section: 'Evening',
           at: _hm(20, 15),
-          config: const TrackerConfig(placeholder: 'Chicken, rice, salad…'),
+          icon: 'dinner',
+          placeholder: 'Chicken, rice, salad…',
         ),
-      ),
-      TemplateTracker(
-        'dinner_ontime',
-        mealOnTime('Dinner', section: 'Evening', at: _hm(20, 15)),
       ),
       TemplateTracker('isha', _prayer('Isha', 'moon', _hm(20, 45), 'Night')),
       TemplateTracker(

@@ -16,6 +16,7 @@ class JourneyUpgrade {
     this.prayers = const [],
     this.meals = const [],
     this.workout,
+    this.mealTexts = const [],
   });
 
   /// Office-day prayers + meal on-time checks (v1.1.0).
@@ -23,6 +24,9 @@ class JourneyUpgrade {
 
   /// Workout as Yes/No with a comment (v1.2.0).
   static const workoutId = 'workout-yes-no';
+
+  /// Meal text entries folded into the on-time checks as info (v1.3.0).
+  static const mealCommentsId = 'meal-comments';
 
   /// Prayers checked against [workMode] on office days.
   static const officePrayers = {'Dhuhr', 'Asr', 'Maghrib'};
@@ -47,14 +51,25 @@ class JourneyUpgrade {
   /// A text "Workout" tracker to turn into "Did you train?" + comment.
   final Tracker? workout;
 
+  /// Text meal trackers ("what I ate") whose entries move into the matching
+  /// "… on time?" check as information; they are archived from today,
+  /// so only eating on time earns points.
+  final List<Tracker> mealTexts;
+
   bool get hasOfficeAndMeals => prayers.isNotEmpty || meals.isNotEmpty;
-  bool get isEmpty => !hasOfficeAndMeals && workout == null;
+  bool get isEmpty =>
+      !hasOfficeAndMeals && workout == null && mealTexts.isEmpty;
 
   /// Ids of the parts this upgrade contains.
   Set<String> get ids => {
     if (hasOfficeAndMeals) officeAndMealsId,
     if (workout != null) workoutId,
+    if (mealTexts.isNotEmpty) mealCommentsId,
   };
+
+  /// Name of the on-time check a meal text tracker folds into.
+  static String checkNameFor(Tracker mealText) =>
+      '${mealNames[mealText.name] ?? mealText.name} on time?';
 
   /// What applying the upgrade would change in a journey's [trackers]
   /// (archived ones included), leaving out [dismissed] parts.
@@ -109,11 +124,22 @@ class JourneyUpgrade {
                 (t.type == TrackerType.longText || t.type == TrackerType.text),
           );
 
+    final mealTexts = dismissed.contains(mealCommentsId)
+        ? const <Tracker>[]
+        : [
+            for (final t in active)
+              if (mealNames.containsKey(t.name) &&
+                  (t.type == TrackerType.longText ||
+                      t.type == TrackerType.text))
+                t,
+          ];
+
     return JourneyUpgrade(
       workMode: workMode,
       prayers: prayers,
       meals: meals,
       workout: workout,
+      mealTexts: mealTexts,
     );
   }
 

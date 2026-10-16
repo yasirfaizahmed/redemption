@@ -3,6 +3,19 @@
 Every release's notes come from its section below: CI copies the section into
 the GitHub release, and the app shows it under “What’s new” before updating.
 
+## 1.3.0
+
+- **Meals: on time earns the points, what you ate is just for your notes.**
+  “Breakfast / Lunch / Dinner on time?” now ask “What did you eat?” in the same
+  sheet. Writing what you ate earns nothing on its own — only *On time* does —
+  and the timeline shows it next to the answer (e.g. “On time — Rice, dal”).
+- Existing journeys: the dashboard offers to fold your separate Breakfast /
+  Lunch / Dinner text trackers into the on-time checks. They stop counting from
+  today (past days keep their score and their text), and what you wrote on days
+  the checks already existed moves into their notes.
+- Any Yes/No tracker with a comment can make it *just for information*
+  (tracker editor).
+
 ## 1.2.0
 
 - **Workout is now “Did you train?”.** One tap on ✓ logs *Trained* and earns the

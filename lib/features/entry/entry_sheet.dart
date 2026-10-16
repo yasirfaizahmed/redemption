@@ -90,10 +90,12 @@ class _EntrySheetState extends ConsumerState<EntrySheet> {
     setState(() => _saving = true);
     // Answering "What did you train?" without tapping an answer means it
     // happened: log the win so the comment isn't stored without points.
+    // Info-only comments ("What did you eat?") never earn anything.
     final value =
         (_draft == null || _draft!.isEmpty) &&
             tracker.type == TrackerType.checkbox &&
             tracker.config.notePrompt.isNotEmpty &&
+            !tracker.config.noteIsInfoOnly &&
             _note.text.trim().isNotEmpty
         ? BoolValue(tracker.winAnswer)
         : _draft;

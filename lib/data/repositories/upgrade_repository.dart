@@ -3,6 +3,7 @@ import 'package:logging/logging.dart';
 
 import '../../core/time/day.dart';
 import '../../domain/journey_upgrades.dart';
+import '../../domain/templates.dart';
 import '../../domain/tracker_value.dart';
 import '../db/database.dart';
 import 'entry_repository.dart';
@@ -68,5 +69,97 @@ class UpgradeRepository {
     for (final t in upgrade.newMealChecks(journeyId: journeyId, from: today)) {
       await trackers.insert(t);
     }
+    if (upgrade.mealTexts.isNotEmpty) {
+      await _foldMealTexts(upgrade, journeyId: journeyId, today: today);
+    }
   });
+
+  /// Meals: "what I ate" becomes information on the matching
+  /// "… on time?" check, and only eating on time earns points.
+  ///
+  /// - each check asks "What did you eat?" (info only), creating the check
+  ///   from today if the journey doesn't have it;
+  /// - meal texts from days the check already existed move into its
+  ///   comment (a day without an on-time answer gets a comment-only entry,
+  ///   which earns nothing);
+  /// - the text trackers are archived from today: past days keep their
+  ///   score and their text stays in the tracker's history.
+  Future<void> _foldMealTexts(
+    JourneyUpgrade upgrade, {
+    required int journeyId,
+    required Day today,
+  }) async {
+    final trackers = TrackerRepository(_db);
+    final entries = EntryRepository(_db);
+    for (final meal in upgrade.mealTexts) {
+      final name = JourneyUpgrade.checkNameFor(meal);
+      var check = (await trackers.forJourney(journeyId))
+          .where((t) => t.name == name && !t.isArchived)
+          .firstOrNull;
+      if (check == null) {
+        final id = await trackers.insert(
+          mealOnTime(
+            JourneyUpgrade.mealNames[meal.name] ?? meal.name,
+            section: meal.section,
+            at: meal.anchorMinutes ?? 12 * 60,
+            icon: meal.icon,
+            placeholder: meal.config.placeholder,
+          ).copyWith(journeyId: journeyId, activeFrom: today),
+        );
+        check = (await trackers.forJourney(journeyId))
+            .firstWhere((t) => t.id == id);
+      } else {
+        await (_db.update(
+          _db.trackers,
+        )..where((t) => t.id.equals(check!.id))).write(
+          TrackersCompanion(
+            icon: Value(meal.icon),
+            config: Value(
+              check.config.copyWith(
+                notePrompt: 'What did you eat?',
+                noteIsInfoOnly: true,
+                placeholder: meal.config.placeholder.isEmpty
+                    ? check.config.placeholder
+                    : meal.config.placeholder,
+              ),
+            ),
+          ),
+        );
+      }
+
+      final mealRows = await (_db.select(
+        _db.entries,
+      )..where((e) => e.trackerId.equals(meal.id))).get();
+      final checkRows = await (_db.select(
+        _db.entries,
+      )..where((e) => e.trackerId.equals(check!.id))).get();
+      final checkByDay = {
+        for (final e in checkRows.map((r) => r.toDomain())) e.day: e,
+      };
+      var moved = 0;
+      for (final e in mealRows.map((r) => r.toDomain())) {
+        final text = switch (e.value) {
+          TextValue(:final text) => text.trim(),
+          _ => '',
+        };
+        final info = [
+          if (text.isNotEmpty) text,
+          if (e.note.trim().isNotEmpty) e.note.trim(),
+        ].join('\n');
+        if (info.isEmpty || e.day.isBefore(check.activeFrom)) continue;
+        final existing = checkByDay[e.day];
+        final note = existing?.note.trim() ?? '';
+        if (note.contains(info)) continue;
+        await entries.upsert(
+          trackerId: check.id,
+          day: e.day,
+          value: existing?.value ?? const TextValue(''),
+          note: note.isEmpty ? info : '$note\n$info',
+        );
+        moved++;
+      }
+      await trackers.archive(meal.id, today);
+      _log.info('${meal.name} folded into $name ($moved entries moved)');
+    }
+  }
 }

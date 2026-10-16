@@ -37,13 +37,13 @@ void main() {
     expect(
       find.descendant(
         of: workoutTile,
-        matching: find.text('Trained — tap to add what you did'),
+        matching: find.text('Trained — tap to add details'),
       ),
       findsOneWidget,
     );
 
     // The sheet opens with the comment box asking what was trained.
-    await tester.tap(find.text('Trained — tap to add what you did'));
+    await tester.tap(find.text('Trained — tap to add details'));
     await settle(tester);
     final comment = find.widgetWithText(TextField, 'What did you train?');
     expect(comment, findsOneWidget);

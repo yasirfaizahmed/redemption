@@ -176,6 +176,7 @@ class TrackerConfig {
     this.maxAttachments = 4,
     this.dayRule,
     this.notePrompt = '',
+    this.noteIsInfoOnly = false,
   });
 
   factory TrackerConfig.fromJson(Map<String, dynamic> json) => TrackerConfig(
@@ -211,6 +212,7 @@ class TrackerConfig {
         ? DayRule.fromJson(json['dayRule'] as Map<String, dynamic>)
         : null,
     notePrompt: json['notePrompt'] as String? ?? '',
+    noteIsInfoOnly: json['noteInfoOnly'] as bool? ?? false,
   );
 
   /// Unit suffix for numeric types (kg, km, glasses…).
@@ -248,6 +250,12 @@ class TrackerConfig {
   /// (e.g. "What did you train?"), and the timeline shows the comment.
   final String notePrompt;
 
+  /// The comment is information only: writing it without picking an answer
+  /// earns nothing (meals: only eating on time counts). When false, a
+  /// comment on its own counts as the winning answer ("What did you
+  /// train?" answered means you trained).
+  final bool noteIsInfoOnly;
+
   ChoiceOption? optionById(String id) =>
       options.firstWhereOrNull((o) => o.id == id);
 
@@ -270,6 +278,7 @@ class TrackerConfig {
     int? maxAttachments,
     DayRule? Function()? dayRule,
     String? notePrompt,
+    bool? noteIsInfoOnly,
   }) => TrackerConfig(
     unit: unit ?? this.unit,
     min: min != null ? min() : this.min,
@@ -289,6 +298,7 @@ class TrackerConfig {
     maxAttachments: maxAttachments ?? this.maxAttachments,
     dayRule: dayRule != null ? dayRule() : this.dayRule,
     notePrompt: notePrompt ?? this.notePrompt,
+    noteIsInfoOnly: noteIsInfoOnly ?? this.noteIsInfoOnly,
   );
 
   Map<String, dynamic> toJson() => {
@@ -310,6 +320,7 @@ class TrackerConfig {
     'maxAttachments': maxAttachments,
     if (dayRule case final rule? when rule.isResolved) 'dayRule': rule.toJson(),
     if (notePrompt.isNotEmpty) 'notePrompt': notePrompt,
+    if (noteIsInfoOnly) 'noteInfoOnly': true,
   };
 
   @override

@@ -122,6 +122,15 @@ class _JourneyUpgradeCardState extends ConsumerState<JourneyUpgradeCard> {
                       'points, with a comment for what you did. What you '
                       'already wrote moves into the comments.',
                 ),
+              if (upgrade.mealTexts.isNotEmpty)
+                const _Point(
+                  icon: Icons.restaurant_rounded,
+                  text:
+                      'Meals: the “on time?” checks ask “What did you eat?” '
+                      '(just for your notes). Only eating on time earns '
+                      'points; the separate meal entries stop counting from '
+                      'today and keep their history.',
+                ),
               Wrap(
                 alignment: WrapAlignment.end,
                 spacing: 8,

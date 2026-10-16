@@ -154,16 +154,23 @@ void main() {
         );
       }
       final names = trackers.map((t) => t.name).toList();
-      for (final (meal, check) in [
-        ('Breakfast', 'Breakfast on time?'),
-        ('Lunch', 'Lunch on time?'),
-        ('Post-workout dinner', 'Dinner on time?'),
+      // One tracker per meal: on time earns the points, what you ate is
+      // information only.
+      for (final meal in ['Breakfast', 'Lunch', 'Post-workout dinner']) {
+        expect(names, isNot(contains(meal)));
+      }
+      for (final check in [
+        'Breakfast on time?',
+        'Lunch on time?',
+        'Dinner on time?',
       ]) {
-        expect(names.indexOf(check), names.indexOf(meal) + 1);
         final t = trackers.firstWhere((t) => t.name == check);
         expect(t.type, TrackerType.checkbox);
         expect(t.goal, const BoolGoal());
         expect(t.isRequired, isTrue);
+        expect(t.config.notePrompt, 'What did you eat?');
+        expect(t.config.noteIsInfoOnly, isTrue);
+        expect(t.config.placeholder, isNotEmpty);
       }
       final workout = trackers.firstWhere((t) => t.name == 'Workout');
       expect(workout.type, TrackerType.checkbox);
@@ -179,6 +186,74 @@ void main() {
         ).isEmpty,
         isTrue,
       );
+    });
+
+    test('meal texts move into on-time checks that already existed', () async {
+      final dir = await Directory.systemTemp.createTemp('meal');
+      addTearDown(() => dir.delete(recursive: true));
+      await BackupService(db, AttachmentStore(dir)).importBytes(
+        await File('test/fixtures/redemption-backup-v1.0.0.zip').readAsBytes(),
+      );
+      final journey = (await JourneyRepository(db).active())!;
+      final start = journey.startDay;
+      final repo = TrackerRepository(db);
+      final upgrades = UpgradeRepository(db);
+      // v1.1 already added the checks from the first day…
+      await upgrades.apply(
+        JourneyUpgrade.plan(
+          await repo.forJourney(journey.id),
+          dismissed: const {
+            JourneyUpgrade.workoutId,
+            JourneyUpgrade.mealCommentsId,
+          },
+        ),
+        journeyId: journey.id,
+        today: start,
+      );
+      var trackers = await repo.forJourney(journey.id);
+      final lunchCheck = trackers.firstWhere((t) => t.name == 'Lunch on time?');
+      final entries = EntryRepository(db);
+      // …and lunch was eaten on time on day 1 (day 2 has no answer).
+      await entries.upsert(
+        trackerId: lunchCheck.id,
+        day: start,
+        value: const BoolValue(true),
+      );
+      const scoring = Scoring(dayStartMinutes: 240);
+      final before = scoring.summarize(
+        start,
+        trackers,
+        EntryIndex(await entries.watchForJourney(journey.id).first),
+      );
+
+      // v1.3: fold the meal texts into the checks.
+      await upgrades.apply(
+        JourneyUpgrade.plan(
+          trackers,
+          dismissed: const {JourneyUpgrade.workoutId},
+        ),
+        journeyId: journey.id,
+        today: start.addDays(5),
+      );
+      trackers = await repo.forJourney(journey.id);
+      final all = EntryIndex(await entries.watchForJourney(journey.id).first);
+      final lunchText = trackers.firstWhere((t) => t.name == 'Lunch');
+      final day1 = all.get(lunchCheck.id, start)!;
+      expect(day1.value, const BoolValue(true));
+      expect(
+        day1.note,
+        (all.get(lunchText.id, start)!.value as TextValue).text.trim(),
+      );
+      final day2 = all.get(lunchCheck.id, start.addDays(1))!;
+      expect(day2.value.isEmpty, isTrue, reason: 'info only, no points');
+      expect(day2.note, isNotEmpty);
+      expect(lunchText.archivedOn, start.addDays(5));
+      expect(
+        scoring.summarize(start, trackers, all).score,
+        before.score,
+        reason: 'past days keep their score',
+      );
+      expect(JourneyUpgrade.plan(trackers).mealTexts, isEmpty);
     });
 
     test('a description the user wrote survives the workout switch', () {
@@ -257,7 +332,13 @@ void main() {
       expect(upgrade.ids, {
         JourneyUpgrade.officeAndMealsId,
         JourneyUpgrade.workoutId,
+        JourneyUpgrade.mealCommentsId,
       });
+      expect(upgrade.mealTexts.map((t) => t.name), [
+        'Breakfast',
+        'Lunch',
+        'Post-workout dinner',
+      ]);
       final workoutId = upgrade.workout!.id;
       final oldWorkouts = {
         for (final e in entries.forTracker(workoutId).values)
@@ -294,6 +375,28 @@ void main() {
       for (final MapEntry(key: day, value: text) in oldWorkouts.entries) {
         expect(converted[day]!.value, const BoolValue(true));
         expect(converted[day]!.note, startsWith(text));
+      }
+
+      // Meals: one on-time check each, asking what was eaten (info only);
+      // the text trackers stop counting from today and keep their history.
+      for (final (meal, check) in [
+        ('Breakfast', 'Breakfast on time?'),
+        ('Lunch', 'Lunch on time?'),
+        ('Post-workout dinner', 'Dinner on time?'),
+      ]) {
+        final text = trackers.firstWhere((t) => t.name == meal);
+        expect(text.archivedOn, today, reason: meal);
+        final c = trackers.firstWhere((t) => t.name == check && !t.isArchived);
+        expect(c.config.notePrompt, 'What did you eat?');
+        expect(c.config.noteIsInfoOnly, isTrue);
+        expect(c.icon, text.icon);
+        expect(
+          EntryIndex(
+            await EntryRepository(db).watchForJourney(journey.id).first,
+          ).forTracker(text.id),
+          hasLength(2),
+          reason: 'history kept on the archived $meal tracker',
+        );
       }
 
       final breakfastCheck = trackers.firstWhere(
