@@ -131,7 +131,7 @@ void main() {
     await openSheet('Sleep time', '08_sheet_time');
     await tester.drag(find.byType(CustomScrollView), const Offset(0, 3000));
     await settle(tester);
-    await openSheet('Breakfast', '09_sheet_text');
+    await openSheet('Breakfast on time?', '09_sheet_text');
 
     await tester.tap(find.text('Insights').last);
     await _shot(tester, '10_insights');
