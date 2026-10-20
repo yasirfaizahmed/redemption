@@ -37,6 +37,7 @@ class AppSettings {
     this.updateSkippedVersion = '',
     this.updateNotifiedVersion = '',
     this.dismissedUpgrades = const {},
+    this.fallAsleepMinutes = 0,
   });
 
   factory AppSettings.fromMap(Map<String, String> m) {
@@ -79,6 +80,10 @@ class AppSettings {
         for (final id in (m['dismissedUpgrades'] ?? '').split(','))
           if (id.isNotEmpty) id,
       },
+      fallAsleepMinutes: (i('fallAsleepMinutes') ?? d.fallAsleepMinutes).clamp(
+        0,
+        120,
+      ),
     );
   }
 
@@ -145,6 +150,10 @@ class AppSettings {
   /// Journey improvements the user applied or declined (ids).
   final Set<String> dismissedUpgrades;
 
+  /// Wake-up times: minutes it takes to fall asleep, added to bedtime
+  /// before counting 90-minute sleep cycles.
+  final int fallAsleepMinutes;
+
   Map<String, String> toMap() => {
     'themeMode': themeMode.name,
     'seedColor': '$seedColor',
@@ -170,6 +179,7 @@ class AppSettings {
     'updateSkippedVersion': updateSkippedVersion,
     'updateNotifiedVersion': updateNotifiedVersion,
     'dismissedUpgrades': (dismissedUpgrades.toList()..sort()).join(','),
+    'fallAsleepMinutes': '$fallAsleepMinutes',
   };
 
   AppSettings copyWith({
@@ -197,6 +207,7 @@ class AppSettings {
     String? updateSkippedVersion,
     String? updateNotifiedVersion,
     Set<String>? dismissedUpgrades,
+    int? fallAsleepMinutes,
   }) => AppSettings(
     themeMode: themeMode ?? this.themeMode,
     seedColor: seedColor ?? this.seedColor,
@@ -226,5 +237,6 @@ class AppSettings {
     updateSkippedVersion: updateSkippedVersion ?? this.updateSkippedVersion,
     updateNotifiedVersion: updateNotifiedVersion ?? this.updateNotifiedVersion,
     dismissedUpgrades: dismissedUpgrades ?? this.dismissedUpgrades,
+    fallAsleepMinutes: fallAsleepMinutes ?? this.fallAsleepMinutes,
   );
 }

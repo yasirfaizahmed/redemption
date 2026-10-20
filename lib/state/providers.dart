@@ -16,6 +16,7 @@ import '../domain/app_settings.dart';
 import '../domain/dashboard.dart';
 import '../domain/models.dart';
 import '../domain/scoring.dart';
+import '../services/alarm_service.dart';
 import '../services/notification_service.dart';
 
 // ---------------------------------------------------------------------------
@@ -33,6 +34,10 @@ final attachmentStoreProvider = Provider<AttachmentStore>(
 
 final notificationServiceProvider = Provider<NotificationService>(
   (ref) => NotificationService(),
+);
+
+final alarmServiceProvider = Provider<AlarmService>(
+  (ref) => const AlarmService(),
 );
 
 final journeyRepositoryProvider = Provider(
@@ -94,6 +99,9 @@ class ClockNotifier extends Notifier<DateTime> {
     state = DateTime.now();
     _scheduleTick();
   }
+
+  /// The exact current time (the state only ticks once a minute).
+  DateTime now() => DateTime.now();
 }
 
 /// Fixed clock for tests and screenshots.
@@ -104,6 +112,8 @@ class FixedClock extends ClockNotifier {
   DateTime build() => time;
   @override
   void refresh() {}
+  @override
+  DateTime now() => time;
 }
 
 final clockProvider = NotifierProvider<ClockNotifier, DateTime>(

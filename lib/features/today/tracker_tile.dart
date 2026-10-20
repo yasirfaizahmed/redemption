@@ -15,6 +15,7 @@ import '../../domain/tracker_value.dart';
 import '../../state/actions.dart';
 import '../../state/providers.dart';
 import '../entry/entry_sheet.dart';
+import '../entry/wake_times.dart';
 
 /// One row of the daily timeline: time · rail node · card with quick action.
 class TrackerTile extends ConsumerWidget {
@@ -335,11 +336,24 @@ class _QuickAction extends ConsumerWidget {
             minimumSize: const Size(64, 44),
             padding: const EdgeInsets.symmetric(horizontal: 14),
           ),
-          onPressed: () => actions.save(
-            tracker,
-            day,
-            TimeValue(Clock.fromDateTime(DateTime.now())),
-          ),
+          onPressed: () async {
+            final now = ref.read(clockProvider.notifier).now();
+            final minutes = Clock.fromDateTime(now);
+            await actions.save(tracker, day, TimeValue(minutes));
+            // Bedtime: offer alarms at the end of full sleep cycles.
+            if (tracker.suggestsWakeTimes && context.mounted) {
+              await showWakeTimesSheet(
+                context,
+                bedtime: DateTime(
+                  now.year,
+                  now.month,
+                  now.day,
+                  now.hour,
+                  now.minute,
+                ),
+              );
+            }
+          },
           child: const Text('Now'),
         );
       case TrackerType.counter:

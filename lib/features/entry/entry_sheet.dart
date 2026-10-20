@@ -9,6 +9,7 @@ import '../../core/widgets/common.dart';
 import '../../domain/formatting.dart';
 import '../../domain/models.dart';
 import '../../domain/scoring.dart';
+import '../../domain/sleep_cycles.dart';
 import '../../domain/tracker_config.dart';
 import '../../domain/tracker_goal.dart';
 import '../../domain/tracker_type.dart';
@@ -16,6 +17,7 @@ import '../../domain/tracker_value.dart';
 import '../../state/actions.dart';
 import '../../state/providers.dart';
 import 'inputs/tracker_input.dart';
+import 'wake_times.dart';
 
 /// Opens the log sheet for [trackerId] on [day].
 Future<void> showEntrySheet(
@@ -242,6 +244,18 @@ class _EntrySheetState extends ConsumerState<EntrySheet> {
               lastNumber: lastNumber,
               onAddOption: (o) => _addOption(tracker, o),
             ),
+            // A bedtime logged for today: alarms on full sleep cycles.
+            if (_draft case TimeValue(:final minutes)
+                when tracker.suggestsWakeTimes && widget.day == today) ...[
+              const SizedBox(height: 16),
+              WakeTimesPanel(
+                bedtime: SleepCycles.bedtimeOn(
+                  widget.day,
+                  minutes,
+                  dayStartMinutes: settings.dayStartMinutes,
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             if (_noteOpen)
               TextField(

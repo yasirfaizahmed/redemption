@@ -233,6 +233,7 @@ class TrackerConfig {
     this.skipRule,
     this.notePrompt = '',
     this.noteIsInfoOnly = false,
+    this.suggestWakeTimes,
   });
 
   factory TrackerConfig.fromJson(Map<String, dynamic> json) => TrackerConfig(
@@ -272,6 +273,7 @@ class TrackerConfig {
         : null,
     notePrompt: json['notePrompt'] as String? ?? '',
     noteIsInfoOnly: json['noteInfoOnly'] as bool? ?? false,
+    suggestWakeTimes: json['wakeTimes'] as bool?,
   );
 
   /// Unit suffix for numeric types (kg, km, glasses…).
@@ -318,6 +320,11 @@ class TrackerConfig {
   /// train?" answered means you trained).
   final bool noteIsInfoOnly;
 
+  /// Time trackers: after logging a bedtime, suggest wake-up times on full
+  /// 90-minute sleep cycles. Null: decided by the name ("Sleep time",
+  /// "Bedtime"…), see `Tracker.suggestsWakeTimes`.
+  final bool? suggestWakeTimes;
+
   ChoiceOption? optionById(String id) =>
       options.firstWhereOrNull((o) => o.id == id);
 
@@ -342,6 +349,7 @@ class TrackerConfig {
     SkipRule? Function()? skipRule,
     String? notePrompt,
     bool? noteIsInfoOnly,
+    bool? Function()? suggestWakeTimes,
   }) => TrackerConfig(
     unit: unit ?? this.unit,
     min: min != null ? min() : this.min,
@@ -363,6 +371,9 @@ class TrackerConfig {
     skipRule: skipRule != null ? skipRule() : this.skipRule,
     notePrompt: notePrompt ?? this.notePrompt,
     noteIsInfoOnly: noteIsInfoOnly ?? this.noteIsInfoOnly,
+    suggestWakeTimes: suggestWakeTimes != null
+        ? suggestWakeTimes()
+        : this.suggestWakeTimes,
   );
 
   Map<String, dynamic> toJson() => {
@@ -387,6 +398,7 @@ class TrackerConfig {
       'skipRule': rule.toJson(),
     if (notePrompt.isNotEmpty) 'notePrompt': notePrompt,
     if (noteIsInfoOnly) 'noteInfoOnly': true,
+    'wakeTimes': ?suggestWakeTimes,
   };
 
   @override

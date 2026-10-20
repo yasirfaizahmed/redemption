@@ -192,6 +192,15 @@ class Tracker {
     return when?.config.optionById(answer)?.label ?? '';
   }
 
+  /// A bedtime tracker: after logging, wake-up times on full 90-minute
+  /// sleep cycles are suggested. Set in the editor, or guessed from the
+  /// name ("Sleep time", "Bedtime", "Went to bed"…).
+  bool get suggestsWakeTimes =>
+      type == TrackerType.time &&
+      (config.suggestWakeTimes ?? _bedtimeName.hasMatch(name));
+
+  static final _bedtimeName = RegExp('sleep|bed', caseSensitive: false);
+
   bool isScheduledOn(Day day) => Weekdays.has(weekdays, day.weekday);
 
   bool isActiveOn(Day day) =>

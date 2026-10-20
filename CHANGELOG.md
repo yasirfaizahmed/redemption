@@ -3,6 +3,18 @@
 Every release's notes come from its section below: CI copies the section into
 the GitHub release, and the app shows it under “What’s new” before updating.
 
+## 1.5.0
+
+- **Wake up fresh: alarm times on full sleep cycles.** Tap *Now* on “Sleep
+  time” and Redemption shows when to wake up at the end of 1–6 full ~90-minute
+  sleep cycles (in your local time; 5–6 cycles, 7½–9 h, are marked
+  *Recommended*). Tap a time to set the alarm in your phone’s Clock app.
+- Set how long you usually take to fall asleep (none, 10, 15, 20 or 30 min) and
+  every time shifts with it. The same wake-up times show in the Sleep time sheet
+  for today’s bedtime.
+- Any time tracker can suggest wake-up times (tracker editor → *Suggest
+  wake-up times*); trackers named like a bedtime do so by default.
+
 ## 1.4.0
 
 - **Work from home? “Left office” switches itself off.** Answer “WFH or

@@ -314,6 +314,8 @@ abstract final class Templates {
           color: 0xFF6366F1,
           section: 'Night',
           at: _hm(22, 0),
+          // After "Now": wake-up times on full 90-minute sleep cycles.
+          config: const TrackerConfig(suggestWakeTimes: true),
           goal: TimeGoal(
             comparator: TimeComparator.before,
             minutes: _hm(22, 30),
