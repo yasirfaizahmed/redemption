@@ -262,6 +262,15 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
           if (o.label.text.trim().isNotEmpty) o.toOption(),
       ],
     );
+    // Wake-up times: save what the switch showed, so a rename later
+    // doesn't flip it.
+    if (type == TrackerType.time) {
+      config = config.copyWith(
+        suggestWakeTimes: () =>
+            config.suggestWakeTimes ??
+            Tracker.looksLikeBedtime(_name.text.trim()),
+      );
+    }
     // A skip rule needs a tracker and at least one of its answers.
     if (config.skipRule case final rule?
         when !rule.isResolved || rule.whenOptionIds.isEmpty) {
@@ -1013,7 +1022,10 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
               'For a bedtime: after logging, shows alarm times at the end of '
               'full 90-minute sleep cycles',
             ),
-            value: draft.suggestsWakeTimes,
+            // The name being typed decides until the switch is touched.
+            value:
+                draft.config.suggestWakeTimes ??
+                Tracker.looksLikeBedtime(_name.text),
             onChanged: (v) => _update(
               (d) => d.copyWith(
                 config: d.config.copyWith(suggestWakeTimes: () => v),

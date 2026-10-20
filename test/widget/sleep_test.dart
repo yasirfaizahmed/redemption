@@ -14,7 +14,12 @@ import 'package:redemption/state/providers.dart';
 import '../support/harness.dart';
 
 class _FakeAlarm extends AlarmService {
+  _FakeAlarm({this.works = true});
+  final bool works;
   final calls = <(int, int, String)>[];
+
+  @override
+  bool get isSupported => true;
 
   @override
   Future<bool> setAlarm({
@@ -23,7 +28,7 @@ class _FakeAlarm extends AlarmService {
     required String message,
   }) async {
     calls.add((hour, minute, message));
-    return true;
+    return works;
   }
 }
 
@@ -72,8 +77,11 @@ void main() {
     for (final t in ['23:40', '01:10', '02:40', '04:10', '05:40', '07:10']) {
       expect(find.text(t), findsOneWidget, reason: t);
     }
-    expect(find.text('Recommended'), findsNWidgets(2));
-    expect(find.text('5 cycles · 7h 30m of sleep'), findsOneWidget);
+    expect(find.textContaining('Recommended'), findsNWidgets(2));
+    expect(
+      find.text('5 cycles · 7h 30m of sleep · Recommended'),
+      findsOneWidget,
+    );
 
     await tester.ensureVisible(find.text('05:40'));
     await settle(tester);
@@ -81,6 +89,25 @@ void main() {
     await settle(tester);
     expect(alarm.calls, [(5, 40, 'Wake up · 5 sleep cycles')]);
     expect(find.text('Alarm set for 05:40 in your Clock app.'), findsOneWidget);
+    expect(
+      find.text('5 cycles · 7h 30m of sleep · Recommended · alarm set'),
+      findsOneWidget,
+    );
+
+    // A second pick adds a second alarm; both stay marked.
+    await tester.ensureVisible(find.text('07:10'));
+    await settle(tester);
+    await tester.tap(find.text('07:10'));
+    await settle(tester);
+    expect(alarm.calls.last, (7, 10, 'Wake up · 6 sleep cycles'));
+    expect(find.textContaining('· alarm set'), findsNWidgets(2));
+    expect(
+      find.text(
+        'Alarms on in your Clock app: 05:40, 07:10. Turn off any you '
+        'don’t need there.',
+      ),
+      findsOneWidget,
+    );
 
     // Taking 15 minutes to fall asleep moves every time, and is remembered.
     await tester.ensureVisible(find.text('15 min'));
@@ -189,5 +216,164 @@ void main() {
     ))!.firstWhere((t) => t.name == 'Sleep time');
     expect(sleep.config.suggestWakeTimes, isFalse);
     expect(sleep.suggestsWakeTimes, isFalse);
+  });
+
+  testWidgets('times a day or more away can\'t be set (the Clock app would '
+      'ring too soon)', (tester) async {
+    usePhoneSurface(tester);
+    final env = await createEnv(tester, template: Templates.redemption);
+    addTearDown(() => disposeEnv(tester, env));
+    final alarm = _FakeAlarm();
+
+    // Up for Fajr: the sheet plans tonight's 22:00 bedtime.
+    await tester.pumpWidget(
+      buildApp(
+        env,
+        now: DateTime(2026, 10, 13, 5),
+        overrides: [alarmServiceProvider.overrideWithValue(alarm)],
+      ),
+    );
+    await settle(tester);
+    await tester.tap(find.text('Today').last);
+    await settle(tester);
+    await scrollTo(tester, 'Sleep time');
+    await tester.tap(find.text('Sleep time'));
+    await settle(tester);
+    final far = find.textContaining('over a day away');
+    await tester.dragUntilVisible(
+      find.text('05:30'),
+      find.byType(SingleChildScrollView).last,
+      const Offset(0, -250),
+    );
+    await settle(tester);
+    expect(far, findsNWidgets(2), reason: '05:30 and 07:00 tomorrow');
+    await tester.tap(find.text('05:30'), warnIfMissed: false);
+    await settle(tester);
+    expect(alarm.calls, isEmpty);
+    // 04:00 tomorrow is 23 hours away: fine.
+    await tester.ensureVisible(find.text('04:00'));
+    await settle(tester);
+    await tester.tap(find.text('04:00'));
+    await settle(tester);
+    expect(alarm.calls, [(4, 0, 'Wake up · 4 sleep cycles')]);
+  });
+
+  testWidgets('a failed alarm says so on the tapped time', (tester) async {
+    usePhoneSurface(tester);
+    final env = await createEnv(tester, template: Templates.redemption);
+    addTearDown(() => disposeEnv(tester, env));
+
+    await tester.pumpWidget(
+      buildApp(
+        env,
+        now: bedtime,
+        overrides: [
+          alarmServiceProvider.overrideWithValue(_FakeAlarm(works: false)),
+        ],
+      ),
+    );
+    await settle(tester);
+    await tester.tap(find.text('Today').last);
+    await settle(tester);
+    await scrollTo(tester, 'Sleep time');
+    await tester.tap(nowOn('Sleep time'));
+    await settle(tester);
+    await tester.tap(find.text('01:10'));
+    await settle(tester);
+    expect(
+      find.text(
+        '2 cycles · 3h of sleep · couldn’t reach the Clock app — set it '
+        'yourself',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('without a Clock app to talk to, the times are a guide', (
+    tester,
+  ) async {
+    usePhoneSurface(tester);
+    final env = await createEnv(tester, template: Templates.redemption);
+    addTearDown(() => disposeEnv(tester, env));
+
+    // The test platform isn't Android: the real service can't set alarms.
+    await tester.pumpWidget(buildApp(env, now: bedtime));
+    await settle(tester);
+    await tester.tap(find.text('Today').last);
+    await settle(tester);
+    await scrollTo(tester, 'Sleep time');
+    await tester.tap(nowOn('Sleep time'));
+    await settle(tester);
+    expect(
+      find.textContaining('Set your alarm for one of these times.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('01:10'));
+    await settle(tester);
+    expect(find.textContaining('Clock app'), findsNothing);
+  });
+
+  testWidgets('the sheet covers the tabs and survives large text', (
+    tester,
+  ) async {
+    usePhoneSurface(tester, textScale: 2);
+    final env = await createEnv(tester, template: Templates.redemption);
+    addTearDown(() => disposeEnv(tester, env));
+
+    await tester.pumpWidget(
+      buildApp(
+        env,
+        now: bedtime,
+        overrides: [alarmServiceProvider.overrideWithValue(_FakeAlarm())],
+      ),
+    );
+    await settle(tester);
+    await tester.tap(find.text('Today').last);
+    await settle(tester);
+    await scrollTo(tester, 'Sleep time');
+    await tester.tap(nowOn('Sleep time'));
+    await settle(tester);
+    expect(find.text('Sleep well'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    expect(find.text('Plan').hitTestable(), findsNothing);
+  });
+
+  testWidgets('a new time tracker named like a bedtime starts with wake-up '
+      'times on, and saves what the switch showed', (tester) async {
+    usePhoneSurface(tester);
+    final env = await createEnv(tester, template: Templates.blank);
+    addTearDown(() => disposeEnv(tester, env));
+
+    await tester.pumpWidget(buildApp(env, now: bedtime));
+    await settle(tester);
+    await tester.tap(find.text('Plan').last);
+    await settle(tester);
+    await tester.tap(find.text('New tracker'));
+    await settle(tester);
+    await tester.tap(find.text('Time of day'));
+    await settle(tester);
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Name'),
+      'Bedtime',
+    );
+    await settle(tester);
+    final toggle = find.widgetWithText(SwitchListTile, 'Suggest wake-up times');
+    await tester.dragUntilVisible(
+      toggle,
+      find.byType(Scrollable).first,
+      const Offset(0, -200),
+    );
+    await settle(tester);
+    expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+    await tester.tap(find.text('Save'));
+    await settle(tester);
+
+    final journey = (await tester.runAsync(
+      () => JourneyRepository(env.db).active(),
+    ))!;
+    final saved = (await tester.runAsync(
+      () => TrackerRepository(env.db).forJourney(journey.id),
+    ))!.single;
+    expect(saved.config.suggestWakeTimes, isTrue);
   });
 }

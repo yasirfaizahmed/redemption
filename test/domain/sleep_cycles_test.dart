@@ -77,7 +77,16 @@ void main() {
       ]) {
         expect(time(name).suggestsWakeTimes, isTrue, reason: name);
       }
-      for (final name in ['Wake-up time', 'Left office', 'Fajr']) {
+      for (final name in [
+        'Wake-up time',
+        'Left office',
+        'Fajr',
+        'Out of bed',
+        'Got out of bed',
+        'Up from bed',
+        'Woke from sleep',
+        'Sleep end',
+      ]) {
         expect(time(name).suggestsWakeTimes, isFalse, reason: name);
       }
       expect(time('Sleep time', flag: false).suggestsWakeTimes, isFalse);

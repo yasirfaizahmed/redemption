@@ -244,18 +244,6 @@ class _EntrySheetState extends ConsumerState<EntrySheet> {
               lastNumber: lastNumber,
               onAddOption: (o) => _addOption(tracker, o),
             ),
-            // A bedtime logged for today: alarms on full sleep cycles.
-            if (_draft case TimeValue(:final minutes)
-                when tracker.suggestsWakeTimes && widget.day == today) ...[
-              const SizedBox(height: 16),
-              WakeTimesPanel(
-                bedtime: SleepCycles.bedtimeOn(
-                  widget.day,
-                  minutes,
-                  dayStartMinutes: settings.dayStartMinutes,
-                ),
-              ),
-            ],
             const SizedBox(height: 16),
             if (_noteOpen)
               TextField(
@@ -302,6 +290,19 @@ class _EntrySheetState extends ConsumerState<EntrySheet> {
                 ),
               ],
             ),
+            // A bedtime for today: alarms on full sleep cycles (below Save,
+            // so logging stays one tap away).
+            if (_draft case TimeValue(:final minutes)
+                when tracker.suggestsWakeTimes && widget.day == today) ...[
+              const SizedBox(height: 24),
+              WakeTimesPanel(
+                bedtime: SleepCycles.bedtimeOn(
+                  widget.day,
+                  minutes,
+                  dayStartMinutes: settings.dayStartMinutes,
+                ),
+              ),
+            ],
           ],
         ),
       ),
