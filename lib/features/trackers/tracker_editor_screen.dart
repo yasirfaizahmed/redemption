@@ -1001,9 +1001,24 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
       case TrackerType.time:
         return [
           Text(
-            'Nothing to set up — log with one tap on “Now” or scroll the wheel. '
-            'Set a target time under Goal.',
+            'Log with one tap on “Now” or scroll the wheel. Set a target time '
+            'under Goal.',
             style: theme.textTheme.bodySmall,
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.alarm_rounded),
+            title: const Text('Suggest wake-up times'),
+            subtitle: const Text(
+              'For a bedtime: after logging, shows alarm times at the end of '
+              'full 90-minute sleep cycles',
+            ),
+            value: draft.suggestsWakeTimes,
+            onChanged: (v) => _update(
+              (d) => d.copyWith(
+                config: d.config.copyWith(suggestWakeTimes: () => v),
+              ),
+            ),
           ),
         ];
       case TrackerType.counter:

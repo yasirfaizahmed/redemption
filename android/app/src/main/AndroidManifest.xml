@@ -12,6 +12,8 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Optional: lets prayer/time reminders fire on the minute (user-granted on Android 14+). -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Wake-up times: set an alarm in the Clock app (normal permission). -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
 
     <application
         android:label="Redemption"
