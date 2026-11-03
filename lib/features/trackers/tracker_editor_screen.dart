@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -74,6 +75,10 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
   int _entryCount = 0;
   bool _countFromStart = false;
   bool _noteInfoOnly = false;
+
+  /// The achievement emoji was picked by hand: a new tracker's name no
+  /// longer fills it in.
+  bool _badgeTouched = false;
   bool _saving = false;
 
   final _name = TextEditingController();
@@ -575,7 +580,12 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
               ),
               validator: (v) =>
                   (v ?? '').trim().isEmpty ? 'Give it a name' : null,
-              onChanged: (_) => setState(() {}),
+              onChanged: (name) => setState(() {
+                // A new "Workout" gets 💪 until an emoji is picked.
+                if (_isNew && !_badgeTouched) {
+                  _badge.text = Achievements.defaultBadges[name.trim()] ?? '';
+                }
+              }),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -715,6 +725,8 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
             const SizedBox(height: 8),
             TextFormField(
               controller: _badge,
+              // One emoji: typing another replaces it.
+              inputFormatters: const [_OneGraphemeFormatter()],
               decoration: const InputDecoration(
                 labelText: 'Achievement emoji (optional)',
                 hintText: 'e.g. 💪',
@@ -723,22 +735,40 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
                 helperMaxLines: 2,
                 prefixIcon: Icon(Icons.emoji_events_outlined),
               ),
-              onChanged: (_) => setState(() {}),
+              validator: (v) => Achievements.reserved.contains((v ?? '').trim())
+                  ? 'The grid uses this one for its own achievements — '
+                        'pick another'
+                  : null,
+              onChanged: (_) => setState(() => _badgeTouched = true),
             ),
             const SizedBox(height: 6),
             Wrap(
               spacing: 6,
               runSpacing: 4,
               children: [
-                for (final e in const ['💪', '📖', '🌅', '🌙', '💧', '🎯', '⭐'])
+                for (final e in const [
+                  '💪',
+                  '📖',
+                  '🌅',
+                  '🌙',
+                  '💧',
+                  '🎯',
+                  '📿',
+                ])
                   ChoiceChip(
                     label: Text(e),
                     selected: _badge.text.trim() == e,
-                    onSelected: (_) => setState(() => _badge.text = e),
+                    onSelected: (_) => setState(() {
+                      _badgeTouched = true;
+                      _badge.text = e;
+                    }),
                   ),
                 ActionChip(
                   label: const Text('None'),
-                  onPressed: () => setState(_badge.clear),
+                  onPressed: () => setState(() {
+                    _badgeTouched = true;
+                    _badge.clear();
+                  }),
                 ),
               ],
             ),
@@ -1640,6 +1670,33 @@ class _DayRuleEditor extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// Keeps a single emoji (grapheme): what's typed or pasted last replaces
+/// what was there.
+class _OneGraphemeFormatter extends TextInputFormatter {
+  const _OneGraphemeFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final text = newValue.text;
+    if (text.characters.length <= 1) return newValue;
+    // The part that was typed, wherever the cursor was.
+    final old = oldValue.text;
+    final added = text.startsWith(old)
+        ? text.substring(old.length)
+        : text.endsWith(old)
+        ? text.substring(0, text.length - old.length)
+        : text;
+    final keep = (added.isEmpty ? text : added).characters.last;
+    return TextEditingValue(
+      text: keep,
+      selection: TextSelection.collapsed(offset: keep.length),
     );
   }
 }

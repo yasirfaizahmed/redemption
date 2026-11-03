@@ -69,26 +69,19 @@ class JourneyGrid extends ConsumerWidget {
       return s.score;
     }
 
-    // The legend explains the emojis on the tiles shown.
-    final legend = <String, String>{};
-    for (final d in days) {
-      final earned = achievements[d] ?? const [];
-      final shown = Achievements.cellEmojis(earned).toSet();
-      for (final a in earned) {
-        if (!shown.contains(a.emoji)) continue;
-        legend.putIfAbsent(
-          a.emoji,
-          () => a.emoji == Achievements.streakEmoji ? 'Streak' : a.label,
-        );
-      }
-    }
-
     return LayoutBuilder(
       builder: (context, constraints) {
         const columns = 10;
         final cell = ((constraints.maxWidth - _gap * (columns - 1)) / columns)
             .clamp(16.0, 44.0);
         final perCell = cell >= 30 ? 3 : (cell >= 22 ? 2 : 1);
+        final legend = _legend([
+          for (final d in days)
+            ...Achievements.shownOnTile(
+              achievements[d] ?? const [],
+              max: perCell,
+            ),
+        ]);
         return Semantics(
           label: tracker == null
               ? 'Journey grid, ${stats?.winDays ?? 0} winning days so far'
@@ -134,10 +127,9 @@ class JourneyGrid extends ConsumerWidget {
                       spacing: 12,
                       runSpacing: 4,
                       children: [
-                        for (final MapEntry(key: emoji, value: label)
-                            in legend.entries)
+                        for (final line in legend)
                           Text(
-                            '$emoji $label',
+                            line,
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: scheme.onSurfaceVariant,
                             ),
@@ -247,6 +239,26 @@ class _Cell extends StatelessWidget {
       ),
     );
   }
+}
+
+/// One line per emoji drawn on the tiles: fixed names for the grid's own
+/// achievements, then each tracker emoji with the trackers that earn it.
+List<String> _legend(List<Achievement> shown) {
+  final kinds = <AchievementKind, String>{};
+  final badges = <String, Set<String>>{};
+  for (final a in shown) {
+    if (a.kind == AchievementKind.badge) {
+      (badges[a.emoji] ??= <String>{}).add(a.label);
+    } else {
+      kinds[a.kind] = a.emoji;
+    }
+  }
+  return [
+    for (final k in AchievementKind.values)
+      if (kinds[k] case final emoji?) '$emoji ${k.legend}',
+    for (final MapEntry(key: emoji, value: names) in badges.entries)
+      '$emoji ${names.join(' · ')}',
+  ];
 }
 
 /// A row of tiny emojis that always fits its tile.

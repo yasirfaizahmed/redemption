@@ -133,7 +133,13 @@ void main() {
       ]);
       expect(
         a,
-        contains(const Achievement('🕌', 'All 5 prayers in congregation')),
+        contains(
+          const Achievement(
+            '🕌',
+            'All 5 prayers in congregation (on time where there was no '
+                'masjid)',
+          ),
+        ),
       );
       // Fajr and Isha are at home: alone there is only "on time".
       final home = dayOf([
@@ -195,14 +201,31 @@ void main() {
     );
   });
 
-  test('a perfect day shows its star (and a streak), not every detail', () {
-    const day = [
-      Achievements.perfect,
-      Achievement('🔥', '7-day streak'),
-      Achievement('🕌', 'All 5 prayers in congregation'),
-      Achievement('💪', 'Workout'),
-    ];
-    expect(Achievements.cellEmojis(day), ['🌟', '🔥']);
+  test('a perfect day\'s star stands for every goal met, not for '
+      'congregation or optional trackers', () {
+    final journal = tracker(
+      41,
+      'Journal',
+      TrackerType.checkbox,
+      goal: const BoolGoal(),
+    ).copyWith(isRequired: false);
+    final ts = [...prayers, workout, journal];
+    // In congregation: a perfect day keeps 🕌 (on time also scores 100%).
+    final congregation = dayOf([
+      ...prayed(List.filled(5, 'jamaah')),
+      e(workout, const BoolValue(true)),
+      e(journal, const BoolValue(true)),
+    ], trackers: ts);
+    expect(congregation.first, Achievements.perfect);
+    expect(Achievements.cellEmojis(congregation), ['🌟', '🕌', '✍️']);
+    // On time alone: the star says it all (but the optional journal stays).
+    final onTime = dayOf([
+      ...prayed(List.filled(5, 'ontime')),
+      e(workout, const BoolValue(true)),
+      e(journal, const BoolValue(true)),
+    ], trackers: ts);
+    expect(onTime.map((a) => a.emoji), containsAll(['🌟', '🤲', '💪', '✍️']));
+    expect(Achievements.cellEmojis(onTime), ['🌟', '✍️']);
     expect(
       Achievements.cellEmojis([
         const Achievement('🕌', 'x'),
@@ -266,6 +289,67 @@ void main() {
     expect(const TrackerConfig().toJson(), isNot(contains('badge')));
     for (final b in ['', '📖']) {
       expect(TrackerConfig.fromJson(TrackerConfig(badge: b).toJson()).badge, b);
+    }
+  });
+
+  test('a renamed meal check still counts, so a late lunch shows', () {
+    final lunch = tracker(
+      32,
+      'Lunch',
+      TrackerType.checkbox,
+      config: const TrackerConfig(yesLabel: 'On time', noLabel: 'Late'),
+      goal: const BoolGoal(),
+    );
+    final ts = [meals.first, lunch];
+    expect(Achievements.isMealCheck(lunch), isTrue);
+    expect(
+      dayOf([
+        e(meals.first, const BoolValue(true)),
+        e(lunch, const BoolValue(false)),
+      ], trackers: ts).map((a) => a.emoji),
+      isNot(contains('🍽️')),
+    );
+    expect(
+      Achievements.isMealCheck(
+        tracker(
+          33,
+          'Slept well?',
+          TrackerType.checkbox,
+          goal: const BoolGoal(),
+        ),
+      ),
+      isFalse,
+    );
+  });
+
+  test('a prayer without the congregation option still counts', () {
+    final fajr = prayers.first.copyWith(
+      config: TrackerConfig(options: prayerOptions.skip(1).toList()),
+    );
+    final ts = [fajr, ...prayers.skip(1)];
+    expect(Achievements.isPrayer(fajr), isTrue);
+    // Fajr missed: no prayer achievement at all.
+    expect(
+      dayOf(
+        prayed(['missed', 'jamaah', 'jamaah', 'jamaah', 'jamaah']),
+        trackers: ts,
+      ).map((a) => a.emoji),
+      isNot(anyOf(contains('🕌'), contains('🤲'))),
+    );
+    // Fajr on time where there's no congregation option: 🕌.
+    expect(
+      dayOf(
+        prayed(['ontime', 'jamaah', 'jamaah', 'jamaah', 'jamaah']),
+        trackers: ts,
+      ).map((a) => a.emoji),
+      contains('🕌'),
+    );
+  });
+
+  test('the grid\'s own emojis are reserved', () {
+    expect(Achievements.reserved, containsAll(['🌟', '🔥', '🕌', '🤲', '🍽️']));
+    for (final e in Achievements.defaultBadges.values) {
+      expect(Achievements.reserved, isNot(contains(e)), reason: e);
     }
   });
 }
