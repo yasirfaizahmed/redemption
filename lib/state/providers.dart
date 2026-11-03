@@ -11,6 +11,7 @@ import '../data/repositories/journey_repository.dart';
 import '../data/repositories/settings_repository.dart';
 import '../data/repositories/tracker_repository.dart';
 import '../data/storage/attachment_store.dart';
+import '../domain/achievements.dart';
 import '../domain/analytics.dart';
 import '../domain/app_settings.dart';
 import '../domain/dashboard.dart';
@@ -247,6 +248,21 @@ final journeyStatsProvider = Provider<JourneyStats?>((ref) {
     trackers: ref.watch(allTrackersProvider).value ?? const [],
     index: ref.watch(entryIndexProvider),
     today: ref.watch(todayProvider),
+    scoring: ref.watch(scoringProvider),
+    threshold: ref.watch(
+      settingsValueProvider.select((s) => s.successThreshold),
+    ),
+  );
+});
+
+/// What each day of the journey earned (🌟 perfect, 🔥 streaks, 🕌 …).
+final achievementsProvider = Provider<Map<Day, List<Achievement>>>((ref) {
+  final stats = ref.watch(journeyStatsProvider);
+  if (stats == null) return const {};
+  return Achievements.forJourney(
+    stats: stats,
+    trackers: ref.watch(allTrackersProvider).value ?? const [],
+    index: ref.watch(entryIndexProvider),
     scoring: ref.watch(scoringProvider),
     threshold: ref.watch(
       settingsValueProvider.select((s) => s.successThreshold),

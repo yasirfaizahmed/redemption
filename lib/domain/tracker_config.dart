@@ -234,6 +234,7 @@ class TrackerConfig {
     this.notePrompt = '',
     this.noteIsInfoOnly = false,
     this.suggestWakeTimes,
+    this.badge,
   });
 
   factory TrackerConfig.fromJson(Map<String, dynamic> json) => TrackerConfig(
@@ -274,6 +275,7 @@ class TrackerConfig {
     notePrompt: json['notePrompt'] as String? ?? '',
     noteIsInfoOnly: json['noteInfoOnly'] as bool? ?? false,
     suggestWakeTimes: json['wakeTimes'] as bool?,
+    badge: json['badge'] as String?,
   );
 
   /// Unit suffix for numeric types (kg, km, glasses…).
@@ -325,6 +327,10 @@ class TrackerConfig {
   /// "Bedtime"…), see `Tracker.suggestsWakeTimes`.
   final bool? suggestWakeTimes;
 
+  /// Emoji shown on the journey grid on days the goal is fully met ('' for
+  /// none). Null: a default by name, see `Achievements.badgeOf`.
+  final String? badge;
+
   ChoiceOption? optionById(String id) =>
       options.firstWhereOrNull((o) => o.id == id);
 
@@ -350,6 +356,7 @@ class TrackerConfig {
     String? notePrompt,
     bool? noteIsInfoOnly,
     bool? Function()? suggestWakeTimes,
+    String? Function()? badge,
   }) => TrackerConfig(
     unit: unit ?? this.unit,
     min: min != null ? min() : this.min,
@@ -374,6 +381,7 @@ class TrackerConfig {
     suggestWakeTimes: suggestWakeTimes != null
         ? suggestWakeTimes()
         : this.suggestWakeTimes,
+    badge: badge != null ? badge() : this.badge,
   );
 
   Map<String, dynamic> toJson() => {
@@ -399,6 +407,7 @@ class TrackerConfig {
     if (notePrompt.isNotEmpty) 'notePrompt': notePrompt,
     if (noteIsInfoOnly) 'noteInfoOnly': true,
     'wakeTimes': ?suggestWakeTimes,
+    'badge': ?badge,
   };
 
   @override

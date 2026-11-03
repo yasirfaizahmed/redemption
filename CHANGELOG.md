@@ -3,6 +3,17 @@
 Every release's notes come from its section below: CI copies the section into
 the GitHub release, and the app shows it under “What’s new” before updating.
 
+## 1.6.0
+
+- **Achievements on the journey grid.** Every day now carries tiny emojis for
+  what it earned: 🌟 a perfect day, 🔥 a streak milestone (3, 7, 14, 21, 30,
+  40… days), 🕌 every prayer in congregation (🤲 every prayer on time), 🍽️
+  every meal on time, and a tracker's own emoji when its goal is met — 💪
+  Workout, 🌅 Wake-up time, 🌙 Sleep time. A legend under the grid explains
+  them, and tapping a day lists them in full.
+- Pick any tracker's emoji, or turn it off, in the tracker editor
+  (*Achievement emoji*).
+
 ## 1.5.0
 
 - **Wake up fresh: alarm times on full sleep cycles.** Tap *Now* on “Sleep

@@ -45,6 +45,7 @@ class _DayDetail extends ConsumerWidget {
     final today = ref.watch(todayProvider);
     final summary = ref.watch(daySummaryProvider(day));
     final use24h = ref.watch(settingsValueProvider.select((s) => s.use24h));
+    final achievements = ref.watch(achievementsProvider)[day] ?? const [];
 
     return ListView(
       controller: controller,
@@ -84,6 +85,21 @@ class _DayDetail extends ConsumerWidget {
             ),
           ],
         ),
+        if (achievements.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final a in achievements)
+                Chip(
+                  visualDensity: VisualDensity.compact,
+                  avatar: Text(a.emoji),
+                  label: Text(a.label),
+                ),
+            ],
+          ),
+        ],
         const SizedBox(height: 16),
         for (final t in trackers)
           () {

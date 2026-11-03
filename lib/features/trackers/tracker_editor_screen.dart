@@ -5,6 +5,7 @@ import '../../app/theme/palette.dart';
 import '../../core/time/day.dart';
 import '../../core/time/time_of_day_x.dart';
 import '../../core/widgets/common.dart';
+import '../../domain/achievements.dart';
 import '../../domain/formatting.dart';
 import '../../domain/journey_upgrades.dart';
 import '../../domain/models.dart';
@@ -86,6 +87,7 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
   final _yes = TextEditingController();
   final _no = TextEditingController();
   final _notePrompt = TextEditingController();
+  final _badge = TextEditingController();
   final _goalValue = TextEditingController();
   final _goalUpper = TextEditingController();
   final List<_OptionDraft> _options = [];
@@ -124,6 +126,7 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
       _yes,
       _no,
       _notePrompt,
+      _badge,
       _goalValue,
       _goalUpper,
     ]) {
@@ -157,6 +160,7 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
     _no.text = c.noLabel;
     _notePrompt.text = c.notePrompt;
     _noteInfoOnly = c.noteIsInfoOnly;
+    _badge.text = Achievements.badgeOf(t);
     for (final o in _options) {
       o.dispose();
     }
@@ -261,6 +265,10 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
         for (final o in _options)
           if (o.label.text.trim().isNotEmpty) o.toOption(),
       ],
+    );
+    // The achievement emoji shown is the one saved (one emoji at most).
+    config = config.copyWith(
+      badge: () => _badge.text.trim().characters.take(1).toString(),
     );
     // Wake-up times: save what the switch showed, so a rename later
     // doesn't flip it.
@@ -703,6 +711,36 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
               subtitle: const Text('Turn off for optional, log-only trackers.'),
               value: draft.isRequired,
               onChanged: (v) => _update((t) => t.copyWith(isRequired: v)),
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _badge,
+              decoration: const InputDecoration(
+                labelText: 'Achievement emoji (optional)',
+                hintText: 'e.g. 💪',
+                helperText:
+                    'Shown on the journey grid on days you meet the goal',
+                helperMaxLines: 2,
+                prefixIcon: Icon(Icons.emoji_events_outlined),
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                for (final e in const ['💪', '📖', '🌅', '🌙', '💧', '🎯', '⭐'])
+                  ChoiceChip(
+                    label: Text(e),
+                    selected: _badge.text.trim() == e,
+                    onSelected: (_) => setState(() => _badge.text = e),
+                  ),
+                ActionChip(
+                  label: const Text('None'),
+                  onPressed: () => setState(_badge.clear),
+                ),
+              ],
             ),
 
             const SectionHeader(
