@@ -218,9 +218,18 @@ class _RingStat extends StatelessWidget {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 10),
-        Text(value, style: theme.textTheme.titleLarge),
+        // Narrow phones with large text: the number shrinks to fit.
+        Flexible(
+          flex: 2,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(value, style: theme.textTheme.titleLarge),
+          ),
+        ),
         const SizedBox(width: 6),
         Flexible(
+          flex: 3,
           child: Text(
             label,
             style: theme.textTheme.bodySmall?.copyWith(
@@ -684,87 +693,113 @@ class _ColourBy extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final current = this.current;
+    // An archived tracker can still colour the grid: keep it on the menu.
+    final options = [
+      if (current != null && !trackers.any((t) => t.id == current.id)) current,
+      ...trackers,
+    ];
     Widget option(IconData icon, Color color, String label, bool selected) =>
-        Row(
-          children: [
-            Icon(icon, size: 20, color: color),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis),
-            ),
-            if (selected) ...[
-              const SizedBox(width: 8),
-              Icon(Icons.check_rounded, size: 20, color: scheme.primary),
+        Semantics(
+          selected: selected,
+          child: Row(
+            children: [
+              Icon(icon, size: 20, color: color),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (selected) ...[
+                const SizedBox(width: 8),
+                Icon(Icons.check_rounded, size: 20, color: scheme.primary),
+              ],
             ],
-          ],
+          ),
         );
-    return Row(
-      children: [
-        Text(
-          'Colour by',
-          style: theme.textTheme.labelMedium?.copyWith(
-            color: scheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Flexible(
-          child: PopupMenuButton<int>(
-            tooltip: 'Colour the grid by',
-            initialValue: current?.id ?? _dailyScore,
-            onSelected: (id) => onPick(id == _dailyScore ? null : id),
-            itemBuilder: (_) => [
-              PopupMenuItem(
-                value: _dailyScore,
-                child: option(
-                  Icons.grid_view_rounded,
-                  scheme.primary,
-                  'Daily score (with achievements)',
-                  current == null,
-                ),
-              ),
-              for (final t in trackers)
-                PopupMenuItem(
-                  value: t.id,
-                  child: option(
-                    TrackerIcons.resolve(t.icon),
-                    Color(t.color),
-                    t.name,
-                    current?.id == t.id,
-                  ),
-                ),
-            ],
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: scheme.outlineVariant),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (current != null) ...[
-                    Icon(
-                      TrackerIcons.resolve(current.icon),
-                      size: 16,
-                      color: Color(current.color),
-                    ),
-                    const SizedBox(width: 6),
-                  ],
-                  Flexible(
-                    child: Text(
-                      current?.name ?? 'Daily score',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelLarge,
-                    ),
-                  ),
-                  const Icon(Icons.arrow_drop_down_rounded),
-                ],
+    // Its own focusable "Colour by …, button", not merged into the card;
+    // the pill drops below the label when there's no room beside it.
+    return MergeSemantics(
+      child: LayoutBuilder(
+        builder: (context, constraints) => Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              'Colour by',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: scheme.onSurfaceVariant,
               ),
             ),
-          ),
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+              child: PopupMenuButton<int>(
+                tooltip: 'Colour the grid by',
+                initialValue: current?.id ?? _dailyScore,
+                borderRadius: BorderRadius.circular(24),
+                // A full 48dp touch target.
+                style: const ButtonStyle(
+                  tapTargetSize: MaterialTapTargetSize.padded,
+                ),
+                onSelected: (id) => onPick(id == _dailyScore ? null : id),
+                itemBuilder: (_) => [
+                  PopupMenuItem(
+                    value: _dailyScore,
+                    child: option(
+                      Icons.grid_view_rounded,
+                      scheme.primary,
+                      'Daily score (with achievements)',
+                      current == null,
+                    ),
+                  ),
+                  for (final t in options)
+                    PopupMenuItem(
+                      value: t.id,
+                      child: option(
+                        TrackerIcons.resolve(t.icon),
+                        Color(t.color),
+                        t.isArchived ? '${t.name} (archived)' : t.name,
+                        current?.id == t.id,
+                      ),
+                    ),
+                ],
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: scheme.outlineVariant),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (current != null) ...[
+                        Icon(
+                          TrackerIcons.resolve(current.icon),
+                          size: 16,
+                          color: Color(current.color),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      Flexible(
+                        child: Text(
+                          current?.name ?? 'Daily score',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelLarge,
+                        ),
+                      ),
+                      const Icon(Icons.arrow_drop_down_rounded),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

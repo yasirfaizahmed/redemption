@@ -504,4 +504,110 @@ void main() {
     );
     expect(find.text('Achievements on the tiles'), findsOneWidget);
   });
+
+  Future<void> scrollToPill(WidgetTester tester) async {
+    await tester.dragUntilVisible(
+      find.byTooltip('Colour the grid by'),
+      find.byType(Scrollable).first,
+      const Offset(0, -300),
+    );
+    await settle(tester);
+  }
+
+  testWidgets('the colour pill is its own button, not the whole card', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    usePhoneSurface(tester);
+    final env = await createEnv(tester, template: Templates.redemption);
+    addTearDown(() => disposeEnv(tester, env));
+
+    await tester.pumpWidget(buildApp(env));
+    await settle(tester);
+    await scrollToPill(tester);
+    final pill = tester.getSemantics(find.byTooltip('Colour the grid by'));
+    expect(pill.label, contains('Colour by'));
+    expect(pill.flagsCollection.isButton, isTrue);
+    final grid = tester.getSemantics(
+      find.bySemanticsLabel(RegExp('winning days so far')).first,
+    );
+    expect(grid.flagsCollection.isButton, isFalse);
+    expect(
+      tester.getSize(find.byTooltip('Colour the grid by')).height,
+      greaterThanOrEqualTo(48),
+    );
+    handle.dispose();
+  });
+
+  testWidgets('a grid coloured by an archived tracker keeps it on the menu', (
+    tester,
+  ) async {
+    usePhoneSurface(tester);
+    final env = await createEnv(tester, template: Templates.redemption);
+    addTearDown(() => disposeEnv(tester, env));
+    await tester.runAsync(() async {
+      final trackers = await TrackerRepository(env.db).forJourney(1);
+      final workout = trackers.firstWhere((t) => t.name == 'Workout');
+      final repo = DashboardRepository(env.db);
+      final grid = (await repo.watch(1).first).firstWhere(
+        (i) => i.kind.name == 'heatmap',
+      );
+      await repo.update(
+        grid.copyWith(config: grid.config.copyWith(trackerIds: [workout.id])),
+      );
+      await TrackerRepository(env.db)
+          .archive(workout.id, const Day(2026, 10, 8));
+    });
+
+    await tester.pumpWidget(buildApp(env));
+    await settle(tester);
+    await scrollToPill(tester);
+    await tester.tap(find.byTooltip('Colour the grid by'));
+    await settle(tester);
+    final archived = find.text('Workout (archived)');
+    expect(archived, findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.ancestor(of: archived, matching: find.byType(Row)).first,
+        matching: find.byIcon(Icons.check_rounded),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('on a narrow phone with large text the pill takes its own line', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(880, 2400); // 320dp
+    tester.view.devicePixelRatio = 2.75;
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final env = await createEnv(tester, template: Templates.redemption);
+    addTearDown(() => disposeEnv(tester, env));
+    await tester.runAsync(() async {
+      final repo = TrackerRepository(env.db);
+      final workout = (await repo.forJourney(1))
+          .firstWhere((t) => t.name == 'Workout');
+      await repo.update(
+        workout.copyWith(name: 'Did you skip watching filth today?'),
+      );
+      final dash = DashboardRepository(env.db);
+      final grid = (await dash.watch(1).first).firstWhere(
+        (i) => i.kind.name == 'heatmap',
+      );
+      await dash.update(
+        grid.copyWith(config: grid.config.copyWith(trackerIds: [workout.id])),
+      );
+    });
+
+    await tester.pumpWidget(buildApp(env));
+    await settle(tester);
+    await scrollToPill(tester);
+    expect(
+      tester.getTopLeft(find.text('Colour by')).dy,
+      lessThan(tester.getTopLeft(find.byTooltip('Colour the grid by')).dy),
+    );
+    expect(tester.takeException(), isNull);
+  });
 }
