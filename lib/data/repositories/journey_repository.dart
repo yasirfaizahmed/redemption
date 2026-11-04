@@ -2,11 +2,13 @@ import 'package:drift/drift.dart';
 import 'package:logging/logging.dart';
 
 import '../../core/time/day.dart';
+import '../../domain/achievements.dart';
 import '../../domain/models.dart';
 import '../../domain/templates.dart';
 import '../../domain/tracker_config.dart';
 import '../db/database.dart';
 import 'mappers.dart';
+import 'settings_repository.dart';
 
 final _log = Logger('JourneyRepository');
 
@@ -194,6 +196,26 @@ class JourneyRepository {
             : () => skipWhen == null
                   ? null
                   : skipRule.copyWith(whenTrackerId: skipWhen),
+      );
+    }
+    // Tracker emojis hidden on the journey grid stay hidden for the copies.
+    final settings = SettingsRepository(_db);
+    final s = await settings.load();
+    final copiedHidden = {
+      for (final key in s.gridHiddenAchievements)
+        if (key.startsWith('tracker:'))
+          if (idMap[int.tryParse(key.substring('tracker:'.length))]
+              case final id?)
+            Achievement.keyFor(AchievementKind.badge, trackerId: id),
+    };
+    if (copiedHidden.isNotEmpty) {
+      await settings.save(
+        s.copyWith(
+          gridHiddenAchievements: {
+            ...s.gridHiddenAchievements,
+            ...copiedHidden,
+          },
+        ),
       );
     }
     final items = await (_db.select(

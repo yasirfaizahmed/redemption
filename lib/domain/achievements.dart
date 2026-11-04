@@ -317,7 +317,8 @@ abstract final class Achievements {
   ];
 
   /// Everything a tile can show, for the grid settings: the grid's own
-  /// achievements, then each of [trackers] with an emoji.
+  /// achievements, then each of [trackers] with an emoji (archived ones
+  /// too: their past days still earn it).
   static List<({String key, String emoji, String label})> choices(
     List<Tracker> trackers,
   ) => [
@@ -347,7 +348,7 @@ abstract final class Achievements {
         (
           key: Achievement.keyFor(AchievementKind.badge, trackerId: t.id),
           emoji: badge,
-          label: t.name,
+          label: t.isArchived ? '${t.name} (archived)' : t.name,
         ),
   ];
 }

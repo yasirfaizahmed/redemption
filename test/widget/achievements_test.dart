@@ -424,4 +424,84 @@ void main() {
     expect(settings.gridEmojisPerTile, 4);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('a new journey copying the trackers keeps hidden emojis hidden', (
+    tester,
+  ) async {
+    final env = await createEnv(tester, template: Templates.redemption);
+    addTearDown(() => disposeEnv(tester, env));
+    await tester.runAsync(() async {
+      final journey = (await JourneyRepository(env.db).active())!;
+      final trackers = await TrackerRepository(env.db).forJourney(journey.id);
+      final wake = trackers.firstWhere((t) => t.name == 'Wake-up time');
+      final settings = SettingsRepository(env.db);
+      await settings.save(
+        (await settings.load()).copyWith(
+          gridHiddenAchievements: {'streak', 'tracker:${wake.id}'},
+        ),
+      );
+      final copy = await JourneyRepository(env.db).createFromExisting(
+        copyFrom: journey.id,
+        name: 'Round 2',
+        intention: '',
+        startDay: const Day(2026, 12, 30),
+        durationDays: 90,
+      );
+      final copied = (await TrackerRepository(env.db).forJourney(copy))
+          .firstWhere((t) => t.name == 'Wake-up time');
+      expect((await settings.load()).gridHiddenAchievements, {
+        'streak',
+        'tracker:${wake.id}',
+        'tracker:${copied.id}',
+      });
+    });
+  });
+
+  testWidgets('a grid coloured by a deleted tracker offers the tile settings', (
+    tester,
+  ) async {
+    usePhoneSurface(tester);
+    final env = await createEnv(tester, template: Templates.redemption);
+    addTearDown(() => disposeEnv(tester, env));
+    await tester.runAsync(() async {
+      final repo = DashboardRepository(env.db);
+      final grid = (await repo.watch(1).first).firstWhere(
+        (i) => i.kind.name == 'heatmap',
+      );
+      await repo.update(
+        grid.copyWith(config: grid.config.copyWith(trackerIds: [9999])),
+      );
+    });
+
+    await tester.pumpWidget(buildApp(env));
+    await settle(tester);
+    await tester.tap(find.byTooltip('Customise dashboard'));
+    await settle(tester);
+    final grid = find.ancestor(
+      of: find.text('Journey grid'),
+      matching: find.byType(ListTile),
+    );
+    await tester.dragUntilVisible(
+      grid,
+      find.byType(Scrollable).first,
+      const Offset(0, -250),
+    );
+    await settle(tester);
+    await tester.tap(
+      find.descendant(of: grid, matching: find.byTooltip('Configure')),
+    );
+    await settle(tester);
+    expect(
+      tester
+          .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Daily score'))
+          .selected,
+      isTrue,
+    );
+    await tester.dragUntilVisible(
+      find.text('Achievements on the tiles'),
+      find.byType(Scrollable).last,
+      const Offset(0, -200),
+    );
+    expect(find.text('Achievements on the tiles'), findsOneWidget);
+  });
 }

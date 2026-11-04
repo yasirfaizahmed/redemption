@@ -281,6 +281,10 @@ class _ConfigSheetState extends ConsumerState<_ConfigSheet> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     var trackers = ref.watch(activeTrackersProvider);
+    // A grid coloured by a tracker that's gone shows the daily score.
+    final dailyScore =
+        _config.trackerId == null ||
+        ref.watch(trackerByIdProvider(_config.trackerId!)) == null;
     if (_kind == DashboardWidgetKind.trend) {
       // Charts make most sense for numbers and times; others show progress bars.
       trackers = [...trackers]
@@ -362,7 +366,7 @@ class _ConfigSheetState extends ConsumerState<_ConfigSheet> {
                     if (_kind == DashboardWidgetKind.heatmap)
                       ChoiceChip(
                         label: const Text('Daily score'),
-                        selected: _config.trackerIds.isEmpty,
+                        selected: dailyScore,
                         onSelected: (_) => setState(
                           () =>
                               _config = _config.copyWith(trackerIds: const []),
@@ -373,8 +377,7 @@ class _ConfigSheetState extends ConsumerState<_ConfigSheet> {
                 ),
             ],
             // Achievements show on daily-score grids (not one tracker's).
-            if (_kind == DashboardWidgetKind.heatmap &&
-                _config.trackerIds.isEmpty) ...[
+            if (_kind == DashboardWidgetKind.heatmap && dailyScore) ...[
               const SizedBox(height: 20),
               GridAchievementSettings(
                 settings: _grid,

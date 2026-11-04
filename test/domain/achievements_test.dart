@@ -410,4 +410,11 @@ void main() {
       6,
     );
   });
+
+  test('archived trackers can still be hidden: their past days earn it', () {
+    final archived = workout.copyWith(archivedOn: () => start.addDays(20));
+    final choices = Achievements.choices([archived]);
+    expect(choices.last.key, 'tracker:20');
+    expect(choices.last.label, 'Workout (archived)');
+  });
 }

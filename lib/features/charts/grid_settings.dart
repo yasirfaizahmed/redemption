@@ -88,7 +88,9 @@ class GridAchievementSettings extends ConsumerWidget {
       color: theme.colorScheme.onSurfaceVariant,
     );
     final hidden = settings.gridHiddenAchievements;
-    final choices = Achievements.choices(ref.watch(activeTrackersProvider));
+    final choices = Achievements.choices(
+      ref.watch(allTrackersProvider).value ?? const [],
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
