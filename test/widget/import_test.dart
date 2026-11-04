@@ -31,10 +31,19 @@ void main() {
     await settle(tester);
 
     await tester.tap(find.text('Import a backup file'));
-    await settle(tester, rounds: 25);
+    // The import runs for real behind a spinner (which never "settles"):
+    // pump until it's done, however busy the machine is.
+    final imported = find.textContaining('Imported 1 journey');
+    for (var i = 0; i < 200 && imported.evaluate().isEmpty; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await settle(tester);
 
     expect(find.text('Rewire your brain\nin 90 days.'), findsNothing);
-    expect(find.textContaining('Imported 1 journey'), findsOneWidget);
+    expect(imported, findsOneWidget);
     final journey = (await tester.runAsync(
       () => JourneyRepository(env.db).active(),
     ))!;
