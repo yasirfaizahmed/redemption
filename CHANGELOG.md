@@ -3,6 +3,19 @@
 Every release's notes come from its section below: CI copies the section into
 the GitHub release, and the app shows it under “What’s new” before updating.
 
+## 1.7.0
+
+- **More achievements on each tile.** A journey-grid tile now fits up to six
+  tiny emojis, in two rows under the day number.
+- **Choose what the tiles show.** In *Customise dashboard → Journey grid*, or the
+  sliders button on the Insights grid, tap each achievement on or off (🌟 🔥 🕌 🤲 🍽️ and every
+  tracker's own emoji), set how many emojis fit on a tile (1–6), and choose
+  whether a perfect day shows just 🌟. Tapping a day still lists everything it
+  earned.
+- **Colour the Home grid by any tracker, right on the card.** A *Colour by* pill
+  above the grid switches between the daily score (with achievements) and any
+  tracker, and remembers your choice.
+
 ## 1.6.0
 
 - **Achievements on the journey grid.** Every day now carries tiny emojis for

@@ -8,6 +8,7 @@ import '../../core/widgets/common.dart';
 import '../../domain/analytics.dart';
 import '../../domain/formatting.dart';
 import '../../state/providers.dart';
+import '../charts/grid_settings.dart';
 import '../charts/journey_grid.dart';
 import '../charts/trend_chart.dart';
 import '../dashboard/widgets/dashboard_cards.dart';
@@ -87,6 +88,12 @@ class _Overview extends ConsumerWidget {
         AppCard(
           title: 'Every day of the journey',
           icon: Icons.grid_view_rounded,
+          trailing: IconButton(
+            tooltip: 'Choose achievements on the tiles',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => showGridSettingsSheet(context),
+            icon: const Icon(Icons.tune_rounded),
+          ),
           child: JourneyGrid(onDayTap: (d) => showDayDetailSheet(context, d)),
         ),
         const SizedBox(height: 12),

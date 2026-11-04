@@ -3,9 +3,11 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/widgets/common.dart';
 import '../../core/widgets/tracker_icons.dart';
+import '../../domain/app_settings.dart';
 import '../../domain/dashboard.dart';
 import '../../domain/models.dart';
 import '../../state/providers.dart';
+import '../charts/grid_settings.dart';
 
 class DashboardEditorScreen extends ConsumerStatefulWidget {
   const DashboardEditorScreen({super.key});
@@ -248,6 +250,9 @@ class _ConfigSheetState extends ConsumerState<_ConfigSheet> {
   late DashboardItemConfig _config = widget.item.config;
   late final _title = TextEditingController(text: widget.item.config.title);
 
+  /// Journey grid: the tile settings being edited (saved on Done).
+  late AppSettings _grid = ref.read(settingsValueProvider);
+
   DashboardWidgetKind get _kind => widget.item.kind;
 
   @override
@@ -367,15 +372,30 @@ class _ConfigSheetState extends ConsumerState<_ConfigSheet> {
                   ],
                 ),
             ],
+            // Achievements show on daily-score grids (not one tracker's).
+            if (_kind == DashboardWidgetKind.heatmap &&
+                _config.trackerIds.isEmpty) ...[
+              const SizedBox(height: 20),
+              GridAchievementSettings(
+                settings: _grid,
+                onChanged: (s) => setState(() => _grid = s),
+              ),
+            ],
             const SizedBox(height: 24),
             FilledButton(
               onPressed: _valid
-                  ? () => Navigator.pop(
-                      context,
-                      widget.item.copyWith(
-                        config: _config.copyWith(title: _title.text.trim()),
-                      ),
-                    )
+                  ? () async {
+                      if (_kind == DashboardWidgetKind.heatmap) {
+                        await saveGridSettings(ref, _grid);
+                      }
+                      if (!context.mounted) return;
+                      Navigator.pop(
+                        context,
+                        widget.item.copyWith(
+                          config: _config.copyWith(title: _title.text.trim()),
+                        ),
+                      );
+                    }
                   : null,
               child: const Text('Done'),
             ),

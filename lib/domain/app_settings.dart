@@ -38,6 +38,9 @@ class AppSettings {
     this.updateNotifiedVersion = '',
     this.dismissedUpgrades = const {},
     this.fallAsleepMinutes = 0,
+    this.gridHiddenAchievements = const {},
+    this.gridEmojisPerTile = 6,
+    this.gridCompactPerfect = false,
   });
 
   factory AppSettings.fromMap(Map<String, String> m) {
@@ -84,6 +87,12 @@ class AppSettings {
         0,
         120,
       ),
+      gridHiddenAchievements: {
+        for (final k in (m['gridHidden'] ?? '').split(','))
+          if (k.isNotEmpty) k,
+      },
+      gridEmojisPerTile: (i('gridEmojis') ?? d.gridEmojisPerTile).clamp(1, 6),
+      gridCompactPerfect: b('gridCompactPerfect') ?? d.gridCompactPerfect,
     );
   }
 
@@ -154,6 +163,16 @@ class AppSettings {
   /// before counting 90-minute sleep cycles.
   final int fallAsleepMinutes;
 
+  /// Journey grid: achievements left off the tiles (keys such as
+  /// "perfect", "streak" or "tracker:12"; see `Achievement.key`).
+  final Set<String> gridHiddenAchievements;
+
+  /// Journey grid: most emojis drawn on a tile (1–6).
+  final int gridEmojisPerTile;
+
+  /// Journey grid: on perfect days the star stands for what it covers.
+  final bool gridCompactPerfect;
+
   Map<String, String> toMap() => {
     'themeMode': themeMode.name,
     'seedColor': '$seedColor',
@@ -180,6 +199,9 @@ class AppSettings {
     'updateNotifiedVersion': updateNotifiedVersion,
     'dismissedUpgrades': (dismissedUpgrades.toList()..sort()).join(','),
     'fallAsleepMinutes': '$fallAsleepMinutes',
+    'gridHidden': (gridHiddenAchievements.toList()..sort()).join(','),
+    'gridEmojis': '$gridEmojisPerTile',
+    'gridCompactPerfect': '$gridCompactPerfect',
   };
 
   AppSettings copyWith({
@@ -208,6 +230,9 @@ class AppSettings {
     String? updateNotifiedVersion,
     Set<String>? dismissedUpgrades,
     int? fallAsleepMinutes,
+    Set<String>? gridHiddenAchievements,
+    int? gridEmojisPerTile,
+    bool? gridCompactPerfect,
   }) => AppSettings(
     themeMode: themeMode ?? this.themeMode,
     seedColor: seedColor ?? this.seedColor,
@@ -238,5 +263,9 @@ class AppSettings {
     updateNotifiedVersion: updateNotifiedVersion ?? this.updateNotifiedVersion,
     dismissedUpgrades: dismissedUpgrades ?? this.dismissedUpgrades,
     fallAsleepMinutes: fallAsleepMinutes ?? this.fallAsleepMinutes,
+    gridHiddenAchievements:
+        gridHiddenAchievements ?? this.gridHiddenAchievements,
+    gridEmojisPerTile: gridEmojisPerTile ?? this.gridEmojisPerTile,
+    gridCompactPerfect: gridCompactPerfect ?? this.gridCompactPerfect,
   );
 }

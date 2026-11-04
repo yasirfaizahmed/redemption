@@ -8,6 +8,7 @@ import '../../../core/time/day.dart';
 import '../../../core/time/time_of_day_x.dart';
 import '../../../core/widgets/common.dart';
 import '../../../core/widgets/progress_ring.dart';
+import '../../../core/widgets/tracker_icons.dart';
 import '../../../domain/analytics.dart';
 import '../../../domain/dashboard.dart';
 import '../../../domain/formatting.dart';
@@ -38,7 +39,7 @@ class DashboardWidgetView extends StatelessWidget {
     DashboardWidgetKind.nextUp => const NextUpCard(),
     DashboardWidgetKind.todayStrip => TodayStripCard(config: item.config),
     DashboardWidgetKind.trackerRings => TrackerRingsCard(config: item.config),
-    DashboardWidgetKind.heatmap => HeatmapCard(config: item.config),
+    DashboardWidgetKind.heatmap => HeatmapCard(item: item),
     DashboardWidgetKind.trend => TrendCard(config: item.config),
     DashboardWidgetKind.weekBars => const AppCard(
       title: 'Last 7 days',
@@ -618,11 +619,12 @@ class TrackerRingsCard extends ConsumerWidget {
 }
 
 class HeatmapCard extends ConsumerWidget {
-  const HeatmapCard({super.key, required this.config});
-  final DashboardItemConfig config;
+  const HeatmapCard({super.key, required this.item});
+  final DashboardItem item;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final config = item.config;
     final tracker = config.trackerId == null
         ? null
         : ref.watch(trackerByIdProvider(config.trackerId!));
@@ -634,10 +636,135 @@ class HeatmapCard extends ConsumerWidget {
           : '${tracker.name} grid',
       icon: Icons.grid_view_rounded,
       trailing: const _Legend(),
-      child: JourneyGrid(
-        trackerId: tracker?.id,
-        onDayTap: (d) => showDayDetailSheet(context, d),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Switch what colours the grid right here (saved with the card).
+          _ColourBy(
+            current: tracker,
+            trackers: ref.watch(activeTrackersProvider),
+            onPick: (id) => ref
+                .read(dashboardRepositoryProvider)
+                .update(
+                  item.copyWith(
+                    config: config.copyWith(
+                      trackerIds: id == null ? const [] : [id],
+                    ),
+                  ),
+                ),
+          ),
+          const SizedBox(height: 10),
+          JourneyGrid(
+            trackerId: tracker?.id,
+            onDayTap: (d) => showDayDetailSheet(context, d),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+/// "Colour by: Daily score ▾" — picks the daily score or one tracker.
+class _ColourBy extends StatelessWidget {
+  const _ColourBy({
+    required this.current,
+    required this.trackers,
+    required this.onPick,
+  });
+
+  final Tracker? current;
+  final List<Tracker> trackers;
+  final ValueChanged<int?> onPick;
+
+  static const _dailyScore = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final current = this.current;
+    Widget option(IconData icon, Color color, String label, bool selected) =>
+        Row(
+          children: [
+            Icon(icon, size: 20, color: color),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis),
+            ),
+            if (selected) ...[
+              const SizedBox(width: 8),
+              Icon(Icons.check_rounded, size: 20, color: scheme.primary),
+            ],
+          ],
+        );
+    return Row(
+      children: [
+        Text(
+          'Colour by',
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: PopupMenuButton<int>(
+            tooltip: 'Colour the grid by',
+            initialValue: current?.id ?? _dailyScore,
+            onSelected: (id) => onPick(id == _dailyScore ? null : id),
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: _dailyScore,
+                child: option(
+                  Icons.grid_view_rounded,
+                  scheme.primary,
+                  'Daily score (with achievements)',
+                  current == null,
+                ),
+              ),
+              for (final t in trackers)
+                PopupMenuItem(
+                  value: t.id,
+                  child: option(
+                    TrackerIcons.resolve(t.icon),
+                    Color(t.color),
+                    t.name,
+                    current?.id == t.id,
+                  ),
+                ),
+            ],
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: scheme.outlineVariant),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (current != null) ...[
+                    Icon(
+                      TrackerIcons.resolve(current.icon),
+                      size: 16,
+                      color: Color(current.color),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  Flexible(
+                    child: Text(
+                      current?.name ?? 'Daily score',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelLarge,
+                    ),
+                  ),
+                  const Icon(Icons.arrow_drop_down_rounded),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

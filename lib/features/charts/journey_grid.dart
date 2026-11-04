@@ -37,6 +37,7 @@ class JourneyGrid extends ConsumerWidget {
     final stats = ref.watch(journeyStatsProvider);
     final scoring = ref.watch(scoringProvider);
     final index = ref.watch(entryIndexProvider);
+    final settings = ref.watch(settingsValueProvider);
     final tracker = trackerId == null
         ? null
         : ref.watch(trackerByIdProvider(trackerId!));
@@ -74,14 +75,18 @@ class JourneyGrid extends ConsumerWidget {
         const columns = 10;
         final cell = ((constraints.maxWidth - _gap * (columns - 1)) / columns)
             .clamp(16.0, 44.0);
-        final perCell = cell >= 30 ? 3 : (cell >= 22 ? 2 : 1);
-        final legend = _legend([
-          for (final d in days)
-            ...Achievements.shownOnTile(
-              achievements[d] ?? const [],
-              max: perCell,
-            ),
-        ]);
+        // Two rows of up to three under the day number; tiles too small
+        // for the number hold two rows of two.
+        final perCell = settings.gridEmojisPerTile
+            .clamp(1, cell >= 22 ? Achievements.maxPerTile : 4)
+            .toInt();
+        List<Achievement> shown(Day d) => Achievements.shownOnTile(
+          achievements[d] ?? const [],
+          max: perCell,
+          hidden: settings.gridHiddenAchievements,
+          compactPerfect: settings.gridCompactPerfect,
+        );
+        final legend = _legend([for (final d in days) ...shown(d)]);
         return Semantics(
           label: tracker == null
               ? 'Journey grid, ${stats?.winDays ?? 0} winning days so far'
@@ -101,10 +106,7 @@ class JourneyGrid extends ConsumerWidget {
                       score: scoreOf(d),
                       isToday: d == today,
                       isFuture: d.isAfter(today),
-                      emojis: Achievements.cellEmojis(
-                        achievements[d] ?? const [],
-                        max: perCell,
-                      ),
+                      emojis: [for (final a in shown(d)) a.emoji],
                       label: [
                         '${DateFormat('d MMM').format(d.toDateTime())}: '
                             '${scoreOf(d) == null ? 'no data' : Fmt.percent(scoreOf(d)!)}',
@@ -219,19 +221,30 @@ class _Cell extends StatelessWidget {
                   '$dayNumber',
                   textScaler: TextScaler.noScaling,
                   style: TextStyle(
-                    fontSize: size * 0.3,
+                    fontSize: size * (emojis.length > 3 ? 0.27 : 0.3),
                     height: 1.05,
                     fontWeight: FontWeight.w700,
                     color: textColor,
                   ),
                 ),
-                _Emojis(emojis, size: size * 0.24, width: size * 0.9),
+                for (final row in _rows(emojis, perRow: 3))
+                  _Emojis(
+                    row,
+                    size: size * (emojis.length > 3 ? 0.21 : 0.24),
+                    width: size * 0.9,
+                  ),
               ],
             ),
-            (false, true) => _Emojis(
-              emojis.take(1).toList(),
-              size: size * 0.5,
-              width: size * 0.9,
+            (false, true) => Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (final row in _rows(emojis, perRow: 2))
+                  _Emojis(
+                    row,
+                    size: size * (emojis.length > 2 ? 0.3 : 0.45),
+                    width: size * 0.9,
+                  ),
+              ],
             ),
             (false, false) => null,
           },
@@ -239,6 +252,13 @@ class _Cell extends StatelessWidget {
       ),
     );
   }
+}
+
+/// [emojis] in balanced rows of at most [perRow] (5 → 3 + 2), two at most.
+List<List<String>> _rows(List<String> emojis, {required int perRow}) {
+  if (emojis.length <= perRow) return [emojis];
+  final first = (emojis.length + 1) ~/ 2;
+  return [emojis.sublist(0, first), emojis.sublist(first)];
 }
 
 /// One line per emoji drawn on the tiles: fixed names for the grid's own

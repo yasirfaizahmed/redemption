@@ -1,8 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:redemption/core/time/day.dart';
+import 'package:redemption/data/repositories/dashboard_repository.dart';
 import 'package:redemption/data/repositories/entry_repository.dart';
 import 'package:redemption/data/repositories/journey_repository.dart';
+import 'package:redemption/data/repositories/settings_repository.dart';
 import 'package:redemption/data/repositories/tracker_repository.dart';
 import 'package:redemption/domain/models.dart';
 import 'package:redemption/domain/templates.dart';
@@ -143,10 +145,15 @@ void main() {
   });
 
   testWidgets('the legend only explains emojis the tiles draw', (tester) async {
-    usePhoneSurface(tester); // 393dp: two emojis per tile
+    usePhoneSurface(tester);
     final env = await createEnv(tester, template: Templates.redemption);
     addTearDown(() => disposeEnv(tester, env));
     await tester.runAsync(() async {
+      // Two emojis per tile.
+      final settings = SettingsRepository(env.db);
+      await settings.save(
+        (await settings.load()).copyWith(gridEmojisPerTile: 2),
+      );
       final trackers = await seed(env);
       await EntryRepository(env.db).upsert(
         trackerId: trackers.firstWhere((t) => t.name == 'Wake-up time').id,
@@ -252,5 +259,169 @@ void main() {
       () => TrackerRepository(env.db).forJourney(journey.id),
     ))!.single;
     expect(saved.config.badge, '💪');
+  });
+
+  testWidgets('a tile holds up to six emojis in two rows', (tester) async {
+    usePhoneSurface(tester);
+    final env = await createEnv(tester, template: Templates.redemption);
+    addTearDown(() => disposeEnv(tester, env));
+    await tester.runAsync(() async {
+      final trackers = await seed(env);
+      final entries = EntryRepository(env.db);
+      int id(String name) => trackers.firstWhere((t) => t.name == name).id;
+      await entries.upsert(
+        trackerId: id('Wake-up time'),
+        day: monday,
+        value: const TimeValue(4 * 60 + 30),
+      );
+      await entries.upsert(
+        trackerId: id('Sleep time'),
+        day: monday,
+        value: const TimeValue(22 * 60),
+      );
+      for (final meal in ['Breakfast', 'Lunch', 'Dinner']) {
+        await entries.upsert(
+          trackerId: id('$meal on time?'),
+          day: monday,
+          value: const BoolValue(true),
+        );
+      }
+    });
+
+    await tester.pumpWidget(buildApp(env));
+    await settle(tester);
+    await openJourneyGrid(tester);
+    // 🕌 🍽️ 🌅 💪 🌙: three on top, two below.
+    final top = find.text('🕌🍽️🌅');
+    await tester.ensureVisible(top);
+    await settle(tester);
+    expect(top, findsOneWidget);
+    expect(find.text('💪🌙'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the grid settings choose what the tiles show', (tester) async {
+    usePhoneSurface(tester);
+    final env = await createEnv(tester, template: Templates.redemption);
+    addTearDown(() => disposeEnv(tester, env));
+    await tester.runAsync(() => seed(env));
+
+    await tester.pumpWidget(buildApp(env));
+    await settle(tester);
+    await openJourneyGrid(tester);
+    await tester.tap(find.byTooltip('Choose achievements on the tiles'));
+    await settle(tester);
+    expect(find.text('Achievements on the tiles'), findsOneWidget);
+    final workout = find.widgetWithText(FilterChip, '💪  Workout');
+    await tester.ensureVisible(workout);
+    await settle(tester);
+    expect(tester.widget<FilterChip>(workout).selected, isTrue);
+    await tester.tap(workout);
+    await settle(tester);
+    await tester.ensureVisible(find.text('Done'));
+    await settle(tester);
+    await tester.tap(find.text('Done'));
+    await settle(tester);
+
+    final settings = (await tester.runAsync(
+      () => SettingsRepository(env.db).load(),
+    ))!;
+    final workoutId = (await tester.runAsync(
+      () => TrackerRepository(env.db).forJourney(1),
+    ))!.firstWhere((t) => t.name == 'Workout').id;
+    expect(settings.gridHiddenAchievements, {'tracker:$workoutId'});
+    expect(find.text('🕌'), findsOneWidget, reason: '💪 left off the tile');
+    expect(find.text('💪 Workout'), findsNothing);
+  });
+
+  testWidgets('the Home grid switches what colours it, right on the card', (
+    tester,
+  ) async {
+    usePhoneSurface(tester);
+    final env = await createEnv(tester, template: Templates.redemption);
+    addTearDown(() => disposeEnv(tester, env));
+    await tester.runAsync(() => seed(env));
+
+    await tester.pumpWidget(buildApp(env));
+    await settle(tester);
+    final pill = find.byTooltip('Colour the grid by');
+    await tester.dragUntilVisible(
+      pill,
+      find.byType(Scrollable).first,
+      const Offset(0, -300),
+    );
+    await settle(tester);
+    expect(find.text('Journey grid'), findsOneWidget);
+    await tester.tap(pill);
+    await settle(tester);
+    await tester.tap(find.text('Workout').last);
+    await settle(tester);
+
+    expect(find.text('Workout grid'), findsOneWidget);
+    final items = (await tester.runAsync(
+      () => DashboardRepository(env.db).watch(1).first,
+    ))!;
+    final workoutId = (await tester.runAsync(
+      () => TrackerRepository(env.db).forJourney(1),
+    ))!.firstWhere((t) => t.name == 'Workout').id;
+    expect(
+      items.firstWhere((i) => i.kind.name == 'heatmap').config.trackerIds,
+      [workoutId],
+    );
+
+    // And back to the daily score.
+    await tester.tap(find.byTooltip('Colour the grid by'));
+    await settle(tester);
+    await tester.tap(find.text('Daily score (with achievements)'));
+    await settle(tester);
+    expect(find.text('Journey grid'), findsOneWidget);
+  });
+
+  testWidgets('the Journey grid\'s customise sheet holds the tile settings', (
+    tester,
+  ) async {
+    usePhoneSurface(tester, textScale: 1.3);
+    final env = await createEnv(tester, template: Templates.redemption);
+    addTearDown(() => disposeEnv(tester, env));
+
+    await tester.pumpWidget(buildApp(env));
+    await settle(tester);
+    await tester.tap(find.byTooltip('Customise dashboard'));
+    await settle(tester);
+    final grid = find.ancestor(
+      of: find.text('Journey grid'),
+      matching: find.byType(ListTile),
+    );
+    await tester.dragUntilVisible(
+      grid,
+      find.byType(Scrollable).first,
+      const Offset(0, -250),
+    );
+    await settle(tester);
+    await tester.tap(
+      find.descendant(of: grid, matching: find.byTooltip('Configure')),
+    );
+    await settle(tester);
+    final compact = find.widgetWithText(
+      SwitchListTile,
+      'Perfect days show just 🌟',
+    );
+    await tester.ensureVisible(compact);
+    await settle(tester);
+    await tester.tap(compact);
+    await settle(tester);
+    await tester.tap(find.text('4'));
+    await settle(tester);
+    await tester.ensureVisible(find.text('Done'));
+    await settle(tester);
+    await tester.tap(find.text('Done'));
+    await settle(tester);
+
+    final settings = (await tester.runAsync(
+      () => SettingsRepository(env.db).load(),
+    ))!;
+    expect(settings.gridCompactPerfect, isTrue);
+    expect(settings.gridEmojisPerTile, 4);
+    expect(tester.takeException(), isNull);
   });
 }

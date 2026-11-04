@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:redemption/core/time/day.dart';
 import 'package:redemption/domain/achievements.dart';
 import 'package:redemption/domain/analytics.dart';
+import 'package:redemption/domain/app_settings.dart';
 import 'package:redemption/domain/models.dart';
 import 'package:redemption/domain/scoring.dart';
 import 'package:redemption/domain/templates.dart';
@@ -217,7 +218,14 @@ void main() {
       e(journal, const BoolValue(true)),
     ], trackers: ts);
     expect(congregation.first, Achievements.perfect);
-    expect(Achievements.cellEmojis(congregation), ['🌟', '🕌', '✍️']);
+    // By default a tile shows everything; compact perfect days keep only
+    // what the star doesn't say.
+    expect(Achievements.cellEmojis(congregation), ['🌟', '🕌', '💪', '✍️']);
+    expect(Achievements.cellEmojis(congregation, compactPerfect: true), [
+      '🌟',
+      '🕌',
+      '✍️',
+    ]);
     // On time alone: the star says it all (but the optional journal stays).
     final onTime = dayOf([
       ...prayed(List.filled(5, 'ontime')),
@@ -225,7 +233,7 @@ void main() {
       e(journal, const BoolValue(true)),
     ], trackers: ts);
     expect(onTime.map((a) => a.emoji), containsAll(['🌟', '🤲', '💪', '✍️']));
-    expect(Achievements.cellEmojis(onTime), ['🌟', '✍️']);
+    expect(Achievements.cellEmojis(onTime, compactPerfect: true), ['🌟', '✍️']);
     expect(
       Achievements.cellEmojis([
         const Achievement('🕌', 'x'),
@@ -351,5 +359,55 @@ void main() {
     for (final e in Achievements.defaultBadges.values) {
       expect(Achievements.reserved, isNot(contains(e)), reason: e);
     }
+  });
+
+  test('grid settings hide achievements by kind or by tracker', () {
+    const day = [
+      Achievements.perfect,
+      Achievement('🔥', '7-day streak', kind: AchievementKind.streak),
+      Achievement('💪', 'Workout', trackerId: 20),
+      Achievement('🌙', 'Sleep time', trackerId: 21),
+    ];
+    expect(day[2].key, 'tracker:20');
+    expect(day[1].key, 'streak');
+    expect(Achievements.cellEmojis(day, hidden: {'streak', 'tracker:21'}), [
+      '🌟',
+      '💪',
+    ]);
+    expect(Achievements.cellEmojis(day, max: 2), ['🌟', '🔥']);
+    // Every option the settings offer, in tile order.
+    final choices = Achievements.choices([workout]);
+    expect(choices.map((c) => c.key), [
+      'perfect',
+      'streak',
+      'congregation',
+      'onTime',
+      'meals',
+      'tracker:20',
+    ]);
+    expect(choices.last.emoji, '💪');
+  });
+
+  test('grid settings are saved', () {
+    const s = AppSettings(
+      gridHiddenAchievements: {'streak', 'tracker:4'},
+      gridEmojisPerTile: 3,
+      gridCompactPerfect: true,
+    );
+    final back = AppSettings.fromMap(s.toMap());
+    expect(back.gridHiddenAchievements, {'streak', 'tracker:4'});
+    expect(back.gridEmojisPerTile, 3);
+    expect(back.gridCompactPerfect, isTrue);
+    const d = AppSettings();
+    expect(
+      AppSettings.fromMap(const {}).gridEmojisPerTile,
+      d.gridEmojisPerTile,
+    );
+    expect(d.gridEmojisPerTile, 6);
+    expect(d.gridCompactPerfect, isFalse);
+    expect(
+      AppSettings.fromMap(const {'gridEmojis': '40'}).gridEmojisPerTile,
+      6,
+    );
   });
 }

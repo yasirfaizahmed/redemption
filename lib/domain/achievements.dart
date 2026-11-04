@@ -30,11 +30,22 @@ class Achievement {
     this.label, {
     this.kind = AchievementKind.badge,
     this.coveredByPerfect = false,
+    this.trackerId,
   });
 
   final String emoji;
   final String label;
   final AchievementKind kind;
+
+  /// For a tracker's own emoji: that tracker.
+  final int? trackerId;
+
+  /// Identifies what kind of achievement this is in the grid settings
+  /// ("perfect", "streak"… or "tracker:12").
+  String get key => keyFor(kind, trackerId: trackerId);
+
+  static String keyFor(AchievementKind kind, {int? trackerId}) =>
+      kind == AchievementKind.badge ? 'tracker:$trackerId' : kind.name;
 
   /// A perfect day already says this (every goal met), so its tile can
   /// leave it out. Never true for congregation: on time scores 100% too.
@@ -254,6 +265,7 @@ abstract final class Achievements {
           Achievement(
             badge,
             t.name,
+            trackerId: t.id,
             coveredByPerfect:
                 t.isRequired && t.isExpectedOn(day, sameDay: sameDay),
           ),
@@ -263,19 +275,79 @@ abstract final class Achievements {
     return list;
   }
 
-  /// What a grid tile shows, at most [max]. On a perfect day the star
-  /// stands for every goal met, so only what it doesn't say stays: a
-  /// streak, congregation, optional trackers.
-  static List<Achievement> shownOnTile(List<Achievement> day, {int max = 3}) {
-    final perfectDay = day.any((a) => a.kind == AchievementKind.perfect);
-    return [
+  /// The most emojis a grid tile can hold (two rows of three).
+  static const maxPerTile = 6;
+
+  /// What a grid tile shows, at most [max], leaving out the [hidden] keys
+  /// (grid settings). With [compactPerfect], a perfect day's star stands
+  /// for every goal met, so only what it doesn't say stays: a streak,
+  /// congregation, optional trackers.
+  static List<Achievement> shownOnTile(
+    List<Achievement> day, {
+    int max = maxPerTile,
+    Set<String> hidden = const {},
+    bool compactPerfect = false,
+  }) {
+    final visible = [
       for (final a in day)
+        if (!hidden.contains(a.key)) a,
+    ];
+    final perfectDay =
+        compactPerfect && visible.any((a) => a.kind == AchievementKind.perfect);
+    return [
+      for (final a in visible)
         if (!perfectDay || !a.coveredByPerfect) a,
     ].take(max).toList();
   }
 
   /// The emojis of [shownOnTile].
-  static List<String> cellEmojis(List<Achievement> day, {int max = 3}) => [
-    for (final a in shownOnTile(day, max: max)) a.emoji,
+  static List<String> cellEmojis(
+    List<Achievement> day, {
+    int max = maxPerTile,
+    Set<String> hidden = const {},
+    bool compactPerfect = false,
+  }) => [
+    for (final a in shownOnTile(
+      day,
+      max: max,
+      hidden: hidden,
+      compactPerfect: compactPerfect,
+    ))
+      a.emoji,
+  ];
+
+  /// Everything a tile can show, for the grid settings: the grid's own
+  /// achievements, then each of [trackers] with an emoji.
+  static List<({String key, String emoji, String label})> choices(
+    List<Tracker> trackers,
+  ) => [
+    (key: AchievementKind.perfect.name, emoji: '🌟', label: 'Perfect day'),
+    (
+      key: AchievementKind.streak.name,
+      emoji: streakEmoji,
+      label: 'Streak milestones',
+    ),
+    (
+      key: AchievementKind.congregation.name,
+      emoji: congregationEmoji,
+      label: AchievementKind.congregation.legend,
+    ),
+    (
+      key: AchievementKind.onTime.name,
+      emoji: onTimeEmoji,
+      label: AchievementKind.onTime.legend,
+    ),
+    (
+      key: AchievementKind.meals.name,
+      emoji: mealsEmoji,
+      label: AchievementKind.meals.legend,
+    ),
+    for (final t in trackers)
+      if (badgeOf(t) case final badge when badge.isNotEmpty)
+        (
+          key: Achievement.keyFor(AchievementKind.badge, trackerId: t.id),
+          emoji: badge,
+          label: t.name,
+        ),
   ];
 }
