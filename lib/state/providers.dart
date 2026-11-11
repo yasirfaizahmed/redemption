@@ -19,6 +19,7 @@ import '../domain/models.dart';
 import '../domain/scoring.dart';
 import '../services/alarm_service.dart';
 import '../services/notification_service.dart';
+import '../services/wake_alarm_service.dart';
 
 // ---------------------------------------------------------------------------
 // Infrastructure (overridden in main() and in tests)
@@ -39,6 +40,22 @@ final notificationServiceProvider = Provider<NotificationService>(
 
 final alarmServiceProvider = Provider<AlarmService>(
   (ref) => const AlarmService(),
+);
+
+/// Wake-up alarms that ring inside the app (overridden at start-up with the
+/// initialised service; this default sets nothing off Android).
+final wakeAlarmServiceProvider = Provider<WakeAlarmService>(
+  (ref) => PluginWakeAlarmService(),
+);
+
+/// Alarms ringing right now: while there are any, the sums are on screen.
+final ringingWakeAlarmsProvider = StreamProvider<List<WakeAlarm>>(
+  (ref) => ref.watch(wakeAlarmServiceProvider).ringing,
+);
+
+/// Alarms set and waiting.
+final scheduledWakeAlarmsProvider = StreamProvider<List<WakeAlarm>>(
+  (ref) => ref.watch(wakeAlarmServiceProvider).scheduled,
 );
 
 final journeyRepositoryProvider = Provider(

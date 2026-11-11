@@ -14,6 +14,7 @@ import '../../state/providers.dart';
 import 'app_update_ui.dart';
 import 'backup_import.dart';
 import 'drive_backup.dart';
+import 'wake_alarm_settings.dart';
 
 final _log = Logger('Settings');
 
@@ -265,6 +266,8 @@ class SettingsScreen extends ConsumerWidget {
               await n.showTest();
             },
           ),
+
+          const WakeAlarmSection(),
 
           const SectionHeader('Journey'),
           ListTile(

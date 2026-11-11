@@ -1,12 +1,14 @@
 import 'dart:async';
 
 import 'package:dynamic_color/dynamic_color.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logging/logging.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../domain/app_settings.dart';
 import '../domain/models.dart';
+import '../features/alarm/alarm_ring_screen.dart';
 import '../features/settings/app_update_ui.dart';
 import '../state/app_update.dart';
 import '../state/drive_sync.dart';
@@ -29,6 +31,11 @@ class _RedemptionAppState extends ConsumerState<RedemptionApp> {
   late final AutoUpdateChecker _updates;
   StreamSubscription<String>? _taps;
   Timer? _syncDebounce;
+
+  /// Swallows the Back button while a wake-up alarm rings.
+  late final _backButton = _AlarmBackButtonDispatcher(
+    () => ref.read(ringingWakeAlarmsProvider).value?.isNotEmpty ?? false,
+  );
 
   @override
   void initState() {
@@ -138,26 +145,48 @@ class _RedemptionAppState extends ConsumerState<RedemptionApp> {
           seed,
           pureBlack: settings.pureBlack,
         );
+        // A ringing wake-up alarm covers everything, start-up included.
+        Widget gate(BuildContext context, Widget? child) =>
+            AlarmRingGate(child: child ?? const SizedBox.shrink());
         if (!ready) {
           return MaterialApp(
             debugShowCheckedModeBanner: false,
             theme: light,
             darkTheme: dark,
             themeMode: settings.themeMode,
+            builder: gate,
             home: const _Splash(),
           );
         }
+        final router = ref.watch(routerProvider);
         return MaterialApp.router(
           title: 'Redemption',
           debugShowCheckedModeBanner: false,
           theme: light,
           darkTheme: dark,
           themeMode: settings.themeMode,
-          routerConfig: ref.watch(routerProvider),
+          builder: gate,
+          routerConfig: RouterConfig<Object>(
+            routeInformationProvider: router.routeInformationProvider,
+            routeInformationParser: router.routeInformationParser,
+            routerDelegate: router.routerDelegate,
+            backButtonDispatcher: _backButton,
+          ),
         );
       },
     );
   }
+}
+
+/// The app's Back button, except while an alarm rings: then it does nothing
+/// (the alarm screen can't be backed out of).
+class _AlarmBackButtonDispatcher extends RootBackButtonDispatcher {
+  _AlarmBackButtonDispatcher(this._ringing);
+  final bool Function() _ringing;
+
+  @override
+  Future<bool> didPopRoute() =>
+      _ringing() ? SynchronousFuture<bool>(true) : super.didPopRoute();
 }
 
 class _Splash extends StatelessWidget {

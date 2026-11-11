@@ -5,8 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/time/time_of_day_x.dart';
+import '../../core/widgets/common.dart';
 import '../../domain/app_settings.dart';
 import '../../domain/sleep_cycles.dart';
+import '../../services/wake_alarm_service.dart';
 import '../../state/providers.dart';
 
 /// After "Now" on a bedtime tracker: wake-up times on full sleep cycles.
@@ -64,7 +66,9 @@ class _WakeTimesSheet extends ConsumerWidget {
 }
 
 /// Wake-up times after 1–6 full ~90-minute sleep cycles from [bedtime],
-/// in local time; tapping one sets an alarm in the Clock app.
+/// in local time. Tapping one sets an alarm: in Redemption, where it rings
+/// until its sums are solved, or (if switched off in Settings) in the
+/// phone's Clock app.
 class WakeTimesPanel extends ConsumerStatefulWidget {
   const WakeTimesPanel({super.key, required this.bedtime});
   final DateTime bedtime;
@@ -85,6 +89,36 @@ class _WakeTimesPanelState extends ConsumerState<WakeTimesPanel> {
     final repo = ref.read(settingsRepositoryProvider);
     final s = await repo.load();
     await repo.save(s.copyWith(fallAsleepMinutes: minutes));
+  }
+
+  /// Sets [w]'s alarm inside Redemption, or cancels it if it is set.
+  Future<void> _toggleInApp(WakeTime w, {required bool isSet}) async {
+    unawaited(HapticFeedback.selectionClick());
+    final service = ref.read(wakeAlarmServiceProvider);
+    if (isSet) {
+      final ok = await confirm(
+        context,
+        title: 'Cancel this alarm?',
+        message: 'It won’t ring.',
+        confirmLabel: 'Cancel alarm',
+        destructive: true,
+      );
+      if (ok) await service.cancel(WakeAlarm.idFor(w.at));
+      return;
+    }
+    setState(() => _busy = true);
+    // The ringing alarm is a notification: without them it can't show.
+    await ref.read(notificationServiceProvider).requestPermission();
+    final ok = await service.schedule(
+      w.at,
+      label: '${w.cycles} sleep ${w.cycles == 1 ? 'cycle' : 'cycles'}',
+    );
+    if (mounted) {
+      setState(() {
+        _busy = false;
+        _failed = ok ? null : w.at;
+      });
+    }
   }
 
   Future<void> _setAlarm(WakeTime w) async {
@@ -118,7 +152,18 @@ class _WakeTimesPanelState extends ConsumerState<WakeTimesPanel> {
     final scheme = theme.colorScheme;
     final settings = ref.watch(settingsValueProvider);
     final now = ref.watch(clockProvider);
-    final canAlarm = ref.watch(alarmServiceProvider).isSupported;
+    // Alarms ring in Redemption; the Clock app is the alternative.
+    final inApp =
+        settings.alarmInApp && ref.watch(wakeAlarmServiceProvider).isSupported;
+    final canAlarm = inApp || ref.watch(alarmServiceProvider).isSupported;
+    final scheduled = inApp
+        ? {
+            for (final a
+                in ref.watch(scheduledWakeAlarmsProvider).value ??
+                    const <WakeAlarm>[])
+              a.id,
+          }
+        : const <int>{};
     final times = SleepCycles.wakeTimes(
       widget.bedtime,
       fallAsleepMinutes: settings.fallAsleepMinutes,
@@ -129,7 +174,12 @@ class _WakeTimesPanelState extends ConsumerState<WakeTimesPanel> {
       ...SleepCycles.fallAsleepChoices,
       settings.fallAsleepMinutes,
     }.toList()..sort();
-    final set = _set.toList()..sort();
+    final set = inApp
+        ? [
+            for (final w in times)
+              if (scheduled.contains(WakeAlarm.idFor(w.at))) w.at,
+          ]
+        : (_set.toList()..sort());
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -148,7 +198,11 @@ class _WakeTimesPanelState extends ConsumerState<WakeTimesPanel> {
         Text(
           'Sleep runs in ~90-minute cycles. Waking at the end of one feels '
           'lighter than waking mid-cycle. '
-          '${canAlarm ? 'Tap a time to set an alarm.' : 'Set your alarm for one of these times.'}',
+          '${inApp
+              ? 'Tap a time to set an alarm that rings until you solve a sum.'
+              : canAlarm
+              ? 'Tap a time to set an alarm.'
+              : 'Set your alarm for one of these times.'}',
           style: theme.textTheme.bodySmall?.copyWith(
             color: scheme.onSurfaceVariant,
           ),
@@ -175,22 +229,38 @@ class _WakeTimesPanelState extends ConsumerState<WakeTimesPanel> {
             wake: w,
             // The Clock app only takes hour:minute and rings at its next
             // occurrence, so a time a day or more away would ring too soon.
+            // Redemption's own alarm is set for the exact day.
             state: !w.at.isAfter(now)
                 ? _TileState.passed
-                : w.at.difference(now) >= const Duration(hours: 24)
+                : !inApp && w.at.difference(now) >= const Duration(hours: 24)
                 ? _TileState.tooFar
-                : _set.contains(w.at)
+                : set.contains(w.at)
                 ? _TileState.alarmSet
                 : _failed == w.at
                 ? _TileState.failed
                 : _TileState.open,
-            onTap: canAlarm && !_busy ? () => _setAlarm(w) : null,
+            failedNote: inApp
+                ? 'couldn’t set the alarm — check notifications are allowed'
+                : 'couldn’t reach the Clock app — set it yourself',
+            onTap: !canAlarm || _busy
+                ? null
+                : inApp
+                ? () => _toggleInApp(
+                    w,
+                    isSet: scheduled.contains(WakeAlarm.idFor(w.at)),
+                  )
+                : () => _setAlarm(w),
           ),
         if (set.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text(
-              set.length == 1
+              inApp
+                  ? '${set.length == 1 ? 'Alarm' : 'Alarms'} set for '
+                        '${set.map(time).join(', ')}. It rings in Redemption '
+                        'at full volume until you solve the sums. Tap a set '
+                        'time to cancel it.'
+                  : set.length == 1
                   ? 'Alarm set for ${time(set.single)} in your Clock app.'
                   : 'Alarms on in your Clock app: '
                         '${set.map(time).join(', ')}. Turn off any you '
@@ -210,12 +280,14 @@ class _WakeTile extends StatelessWidget {
     required this.time,
     required this.wake,
     required this.state,
+    required this.failedNote,
     required this.onTap,
   });
 
   final String time;
   final WakeTime wake;
   final _TileState state;
+  final String failedNote;
 
   /// Null when no alarm can be set from here (the times are a guide).
   final VoidCallback? onTap;
@@ -231,7 +303,7 @@ class _WakeTile extends StatelessWidget {
       _TileState.passed => 'already passed',
       _TileState.tooFar => 'over a day away — set it closer to bedtime',
       _TileState.alarmSet => 'alarm set',
-      _TileState.failed => 'couldn’t reach the Clock app — set it yourself',
+      _TileState.failed => failedNote,
       _TileState.open => null,
     };
     return Card(

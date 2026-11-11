@@ -1,5 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
+import 'math_challenge.dart';
+
 enum QuotePack {
   faith('Qur’an & Sunnah'),
   discipline('Discipline & science'),
@@ -41,6 +43,9 @@ class AppSettings {
     this.gridHiddenAchievements = const {},
     this.gridEmojisPerTile = 6,
     this.gridCompactPerfect = false,
+    this.alarmInApp = true,
+    this.alarmMathDifficulty = MathDifficulty.hard,
+    this.alarmMathCount = 1,
   });
 
   factory AppSettings.fromMap(Map<String, String> m) {
@@ -93,6 +98,14 @@ class AppSettings {
       },
       gridEmojisPerTile: (i('gridEmojis') ?? d.gridEmojisPerTile).clamp(1, 6),
       gridCompactPerfect: b('gridCompactPerfect') ?? d.gridCompactPerfect,
+      alarmInApp: b('alarmInApp') ?? d.alarmInApp,
+      alarmMathDifficulty: m['alarmMath'] == null
+          ? d.alarmMathDifficulty
+          : MathDifficulty.parse(m['alarmMath']),
+      alarmMathCount: (i('alarmMathCount') ?? d.alarmMathCount).clamp(
+        MathChallenge.minProblems,
+        MathChallenge.maxProblems,
+      ),
     );
   }
 
@@ -173,6 +186,14 @@ class AppSettings {
   /// Journey grid: on perfect days the star stands for what it covers.
   final bool gridCompactPerfect;
 
+  /// Wake-up alarms ring inside Redemption until their sums are solved
+  /// (off: they are handed to the phone's Clock app).
+  final bool alarmInApp;
+
+  /// How hard the sums are, and how many must be solved to stop the alarm.
+  final MathDifficulty alarmMathDifficulty;
+  final int alarmMathCount;
+
   Map<String, String> toMap() => {
     'themeMode': themeMode.name,
     'seedColor': '$seedColor',
@@ -202,6 +223,9 @@ class AppSettings {
     'gridHidden': (gridHiddenAchievements.toList()..sort()).join(','),
     'gridEmojis': '$gridEmojisPerTile',
     'gridCompactPerfect': '$gridCompactPerfect',
+    'alarmInApp': '$alarmInApp',
+    'alarmMath': alarmMathDifficulty.name,
+    'alarmMathCount': '$alarmMathCount',
   };
 
   AppSettings copyWith({
@@ -233,6 +257,9 @@ class AppSettings {
     Set<String>? gridHiddenAchievements,
     int? gridEmojisPerTile,
     bool? gridCompactPerfect,
+    bool? alarmInApp,
+    MathDifficulty? alarmMathDifficulty,
+    int? alarmMathCount,
   }) => AppSettings(
     themeMode: themeMode ?? this.themeMode,
     seedColor: seedColor ?? this.seedColor,
@@ -267,5 +294,8 @@ class AppSettings {
         gridHiddenAchievements ?? this.gridHiddenAchievements,
     gridEmojisPerTile: gridEmojisPerTile ?? this.gridEmojisPerTile,
     gridCompactPerfect: gridCompactPerfect ?? this.gridCompactPerfect,
+    alarmInApp: alarmInApp ?? this.alarmInApp,
+    alarmMathDifficulty: alarmMathDifficulty ?? this.alarmMathDifficulty,
+    alarmMathCount: alarmMathCount ?? this.alarmMathCount,
   );
 }

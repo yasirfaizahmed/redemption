@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="alarm_guard_label">Redemption alarm guard</string>
+    <string name="alarm_guard_summary">Keeps you on the sums while your wake-up alarm rings</string>
+    <string name="alarm_guard_description">Only while a Redemption wake-up alarm is ringing, and never otherwise, this closes the power menu, the uninstall dialog, Settings and other apps, and ignores the volume keys, until you solve the sums. It reads no content from your screen.</string>
+</resources>

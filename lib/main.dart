@@ -11,6 +11,7 @@ import 'data/db/database.dart';
 import 'data/repositories/entry_repository.dart';
 import 'data/storage/attachment_store.dart';
 import 'services/notification_service.dart';
+import 'services/wake_alarm_service.dart';
 import 'state/providers.dart';
 
 final _log = Logger('Bootstrap');
@@ -35,6 +36,9 @@ Future<void> main() async {
   final attachments = await AttachmentStore.open();
   final notifications = NotificationService();
   await notifications.init();
+  // Wake-up alarms: one may be ringing right now (that's why we started).
+  final wakeAlarms = PluginWakeAlarmService();
+  await wakeAlarms.init();
   _log.info(
     'Bootstrapped in ${stopwatch.elapsedMilliseconds} ms '
     '(${kReleaseMode ? 'release' : 'debug'})',
@@ -56,6 +60,7 @@ Future<void> main() async {
         databaseProvider.overrideWithValue(db),
         attachmentStoreProvider.overrideWithValue(attachments),
         notificationServiceProvider.overrideWithValue(notifications),
+        wakeAlarmServiceProvider.overrideWithValue(wakeAlarms),
       ],
       child: const RedemptionApp(),
     ),
