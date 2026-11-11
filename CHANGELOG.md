@@ -3,6 +3,25 @@
 Every release's notes come from its section below: CI copies the section into
 the GitHub release, and the app shows it under “What’s new” before updating.
 
+## 1.8.0
+
+- **Redemption's own wake-up alarm.** Tap a wake-up time after *Now* on Sleep
+  time and the alarm is set inside Redemption. It rings at full volume, which
+  the volume buttons can't lower, and covers the screen with a sum to solve
+  (e.g. 38 × 17 + 469). It stops only when you get it right. Tap a set time
+  again to cancel it.
+- It keeps ringing if you close the app, and rings again after a restart, or
+  when the app is next opened, if it was never solved.
+- **Settings → Wake-up alarm:** how hard the sums are (medium, hard, very hard),
+  how many in a row (1–5), a 15-second test alarm, and a checklist so nothing
+  gets you out of it: notifications, showing over the lock screen, battery
+  saving, and the optional **alarm guard**. Turn the guard on in Accessibility;
+  while the alarm rings it closes the power menu, the uninstall dialog,
+  Settings and other apps, and ignores the volume buttons.
+- No app can stop a forced restart (holding the power button about 10 s); the
+  alarm rings again once the phone is back on. Turn *Ring in Redemption* off to
+  use your Clock app as before.
+
 ## 1.7.0
 
 - **More achievements on each tile.** A journey-grid tile now fits up to six
