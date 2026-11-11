@@ -15,34 +15,79 @@ import '../../state/providers.dart';
 final alarmRandomProvider = Provider<Random>((ref) => Random());
 
 /// Puts [AlarmRingScreen] over the whole app while a wake-up alarm rings —
-/// above every route, sheet and dialog, whatever the app was showing.
-class AlarmRingGate extends ConsumerWidget {
+/// above every route, sheet and dialog, whatever the app was showing — and
+/// makes sure neither the Back button nor the back gesture gets past it.
+class AlarmRingGate extends ConsumerStatefulWidget {
   const AlarmRingGate({super.key, required this.child});
   final Widget child;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AlarmRingGate> createState() => _AlarmRingGateState();
+}
+
+class _AlarmRingGateState extends ConsumerState<AlarmRingGate> {
+  /// What the app's navigator last said about handling Back, to hand back
+  /// once the alarm is solved.
+  bool _navigatorHandlesBack = false;
+
+  /// While covered, the system always sends Back to the app (where it is
+  /// swallowed): whatever the navigator says is kept for later instead.
+  bool _onNavigation(NavigationNotification n, bool covered) {
+    _navigatorHandlesBack = n.canHandlePop;
+    if (!covered) return false;
+    if (!n.canHandlePop) {
+      const NavigationNotification(canHandlePop: true).dispatch(context);
+    }
+    return !n.canHandlePop;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final ringing =
         ref.watch(ringingWakeAlarmsProvider).value ?? const <WakeAlarm>[];
     final covered = ringing.isNotEmpty;
-    // Tell the system the app handles Back while ringing (it is swallowed),
-    // and hand it back afterwards.
     ref.listen(ringingWakeAlarmsProvider, (previous, next) {
       final was = previous?.value?.isNotEmpty ?? false;
       final now = next.value?.isNotEmpty ?? false;
-      if (was != now) {
-        NavigationNotification(canHandlePop: now).dispatch(context);
-      }
+      if (was == now) return;
+      NavigationNotification(canHandlePop: now || _navigatorHandlesBack)
+          .dispatch(context);
+      if (!now) ref.read(wakeAlarmServiceProvider).ringingEnded();
     });
+    final theme = Theme.of(context);
     return Stack(
       fit: StackFit.expand,
       children: [
         // Always the same wrappers, so the app underneath keeps its state.
-        IgnorePointer(
-          ignoring: covered,
-          child: ExcludeSemantics(excluding: covered, child: child),
+        NotificationListener<NavigationNotification>(
+          onNotification: (n) => _onNavigation(n, covered),
+          // While ringing, pages underneath lose their back gesture (it
+          // would pop them behind the sums); Back itself is swallowed by
+          // the app's back button dispatcher.
+          child: Theme(
+            data: covered
+                ? theme.copyWith(
+                    pageTransitionsTheme: const PageTransitionsTheme(
+                      builders: {
+                        TargetPlatform.android:
+                            FadeForwardsPageTransitionsBuilder(),
+                      },
+                    ),
+                  )
+                : theme,
+            child: IgnorePointer(
+              ignoring: covered,
+              child: ExcludeSemantics(excluding: covered, child: widget.child),
+            ),
+          ),
         ),
-        if (covered) AlarmRingScreen(alarms: ringing),
+        // A different set of alarms gets fresh sums (and never a stuck
+        // "stopping" screen for an alarm that took over).
+        if (covered)
+          AlarmRingScreen(
+            key: ValueKey(ringing.map((a) => a.id).join(',')),
+            alarms: ringing,
+          ),
       ],
     );
   }
@@ -72,6 +117,8 @@ class _AlarmRingScreenState extends ConsumerState<AlarmRingScreen> {
   @override
   void initState() {
     super.initState();
+    // Only now, with sums to solve, may the alarm guard hold the phone.
+    ref.read(wakeAlarmServiceProvider).sumsShown();
     final settings = ref.read(settingsValueProvider);
     _problems = MathChallenge.generateAll(
       ref.read(alarmRandomProvider),
@@ -153,44 +200,52 @@ class _AlarmRingScreenState extends ConsumerState<AlarmRingScreen> {
         body: SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+            // The keypad stays put at the bottom; only the top scrolls, and
+            // on a short screen the dua makes room for the sum.
             child: LayoutBuilder(
-              builder: (context, constraints) => SingleChildScrollView(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _Header(
-                        time: Clock.format(
-                          Clock.fromDateTime(now),
-                          use24h: settings.use24h,
-                        ),
-                        label: label,
-                        showDua: settings.quotePack != QuotePack.discipline,
+              builder: (context, constraints) => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _Header(
+                            time: Clock.format(
+                              Clock.fromDateTime(now),
+                              use24h: settings.use24h,
+                            ),
+                            label: label,
+                            showDua:
+                                settings.quotePack != QuotePack.discipline &&
+                                constraints.maxHeight >= 640,
+                          ),
+                          const SizedBox(height: 12),
+                          if (_solved)
+                            _Stopping(failed: _stopFailed, onRetry: _stop)
+                          else
+                            _ProblemCard(
+                              problem: _problems[_index],
+                              number: _index + 1,
+                              total: _problems.length,
+                              typed: _typed,
+                              wrong: _wrong,
+                            ),
+                        ],
                       ),
-                      const SizedBox(height: 12),
-                      if (_solved)
-                        _Stopping(failed: _stopFailed, onRetry: _stop)
-                      else ...[
-                        _ProblemCard(
-                          problem: _problems[_index],
-                          number: _index + 1,
-                          total: _problems.length,
-                          typed: _typed,
-                          wrong: _wrong,
-                        ),
-                        const SizedBox(height: 12),
-                        _Keypad(
-                          onDigit: _press,
-                          onBackspace: _backspace,
-                          onSubmit: _submit,
-                          canSubmit: _typed.isNotEmpty && !_stopping,
-                        ),
-                      ],
-                    ],
+                    ),
                   ),
-                ),
+                  if (!_solved) ...[
+                    const SizedBox(height: 12),
+                    _Keypad(
+                      onDigit: _press,
+                      onBackspace: _backspace,
+                      onSubmit: _submit,
+                      canSubmit: _typed.isNotEmpty && !_stopping,
+                    ),
+                  ],
+                ],
               ),
             ),
           ),

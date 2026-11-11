@@ -2,5 +2,5 @@
 <resources>
     <string name="alarm_guard_label">Redemption alarm guard</string>
     <string name="alarm_guard_summary">Keeps you on the sums while your wake-up alarm rings</string>
-    <string name="alarm_guard_description">Only while a Redemption wake-up alarm is ringing, and never otherwise, this closes the power menu, the uninstall dialog, Settings and other apps, and ignores the volume keys, until you solve the sums. It reads no content from your screen.</string>
+    <string name="alarm_guard_description">Only while a Redemption wake-up alarm is ringing, and never otherwise, this closes the power menu, the uninstall dialog, Settings and other apps, and ignores the volume keys, until you solve the sums. Calls and emergency help are never blocked, and it lets go after an hour. It only looks at which app or menu has opened, never what you type, and nothing leaves your phone.</string>
 </resources>

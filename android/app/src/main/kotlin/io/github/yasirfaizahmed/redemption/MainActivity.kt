@@ -26,12 +26,20 @@ class MainActivity : FlutterActivity() {
         showOverLockScreenIfRinging()
     }
 
+    /** The alarm brings back an app already open behind the lock screen. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        showOverLockScreenIfRinging()
+    }
+
     /** A ringing wake-up alarm shows its sums over the lock screen. */
-    private fun showOverLockScreenIfRinging() {
+    private fun showOverLockScreenIfRinging() =
+        showOverLockScreen(AlarmService.ringingAlarmIds.isNotEmpty())
+
+    private fun showOverLockScreen(show: Boolean) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1) return
-        val ringing = AlarmService.ringingAlarmIds.isNotEmpty()
-        setShowWhenLocked(ringing)
-        setTurnScreenOn(ringing)
+        setShowWhenLocked(show)
+        setTurnScreenOn(show)
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -51,6 +59,17 @@ class MainActivity : FlutterActivity() {
                     }
                     // What the phone lets Redemption's own alarm do.
                     "checks" -> result.success(checks())
+                    // The sums are on screen: the alarm guard may act.
+                    "sumsShown" -> {
+                        AlarmGuardService.sumsShownAt = System.currentTimeMillis()
+                        result.success(null)
+                    }
+                    // Solved: the journal goes back behind the lock screen.
+                    "ringingEnded" -> {
+                        AlarmGuardService.sumsShownAt = 0L
+                        showOverLockScreenIfRinging()
+                        result.success(null)
+                    }
                     "openSetting" -> result.success(openSetting(call.argument<String>("which") ?: ""))
                     else -> result.notImplemented()
                 }

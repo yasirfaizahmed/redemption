@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Google Drive backup (debug builds get this implicitly; release needs it). -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -46,6 +47,14 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+
+        <!-- The alarm plugin exports its receiver, so any app could send it
+             "stop" and silence the alarm without the sums. Only AlarmManager
+             and the app itself may reach it. -->
+        <receiver
+            android:name="com.gdelataillade.alarm.alarm.AlarmReceiver"
+            android:exported="false"
+            tools:replace="android:exported" />
 
         <!-- Alarm guard (opt-in, Accessibility): while a wake-up alarm rings it
              closes the power menu, uninstall dialog and Settings and swallows

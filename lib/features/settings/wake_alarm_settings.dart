@@ -118,7 +118,13 @@ class _WakeAlarmSectionState extends ConsumerState<WakeAlarmSection>
             showSelectedIcon: false,
             segments: [
               for (final d in MathDifficulty.values)
-                ButtonSegment(value: d, label: Text(d.label)),
+                ButtonSegment(
+                  value: d,
+                  label: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(d.label, maxLines: 1, softWrap: false),
+                  ),
+                ),
             ],
             selected: {s.alarmMathDifficulty},
             onSelectionChanged: (v) =>
@@ -159,16 +165,17 @@ class _WakeAlarmSectionState extends ConsumerState<WakeAlarmSection>
           ),
         ),
         for (final a in scheduled)
-          ListTile(
-            leading: const Icon(Icons.alarm_rounded),
-            title: Text(when(a.at)),
-            subtitle: a.label.isEmpty ? null : Text(a.label),
-            trailing: IconButton(
-              tooltip: 'Cancel this alarm',
-              onPressed: () => service.cancel(a.id),
-              icon: const Icon(Icons.close_rounded),
+          if (a.at.isAfter(ref.watch(clockProvider)))
+            ListTile(
+              leading: const Icon(Icons.alarm_rounded),
+              title: Text(when(a.at)),
+              subtitle: a.label.isEmpty ? null : Text(a.label),
+              trailing: IconButton(
+                tooltip: 'Cancel this alarm',
+                onPressed: () => service.cancel(a.id),
+                icon: const Icon(Icons.close_rounded),
+              ),
             ),
-          ),
         ListTile(
           leading: const Icon(Icons.play_circle_outline_rounded),
           title: const Text('Test the alarm'),
@@ -226,7 +233,7 @@ class _WakeAlarmSectionState extends ConsumerState<WakeAlarmSection>
             'App info → ⋮ → Allow restricted settings, then try again. The '
             'volume is held at maximum regardless. No app can stop a forced '
             'restart (holding the power button ~10 s) — if that happens, the '
-            'alarm rings again as soon as the phone is back on.',
+            'alarm rings again once the phone is back on and you unlock it.',
             style: muted,
           ),
         ),

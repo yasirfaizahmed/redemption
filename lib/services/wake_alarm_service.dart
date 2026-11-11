@@ -73,7 +73,8 @@ abstract class WakeAlarmService {
   /// Sets an alarm for [at]. False when the phone refused it.
   Future<bool> schedule(DateTime at, {String label = ''});
 
-  /// Removes an alarm that hasn't rung yet.
+  /// Removes an alarm that hasn't rung yet (one already due can't be
+  /// cancelled — only solved).
   Future<void> cancel(int id);
 
   /// Silences a ringing alarm — only called once its sums are solved.
@@ -84,6 +85,12 @@ abstract class WakeAlarmService {
   /// Opens a system screen: 'accessibility', 'appInfo', 'fullScreen',
   /// 'notifications' or 'battery'.
   Future<void> openSystemSetting(String which);
+
+  /// The sums are on screen: only now may the alarm guard hold the phone.
+  Future<void> sumsShown();
+
+  /// No alarm rings any more: the app stops showing over the lock screen.
+  Future<void> ringingEnded();
 }
 
 /// [WakeAlarmService] on the `alarm` plugin: a foreground service that keeps
@@ -150,6 +157,7 @@ class PluginWakeAlarmService implements WakeAlarmService {
     final ringing = {for (final a in Alarm.ringing.value.alarms) a.id};
     final scheduled = {for (final a in Alarm.scheduled.value.alarms) a.id};
     final keep = <WakeAlarm>[];
+    final due = <WakeAlarm>[];
     for (final a in owed) {
       if (a.at.isAfter(now)) {
         keep.add(a);
@@ -159,13 +167,17 @@ class PluginWakeAlarmService implements WakeAlarmService {
         _log.info('Dropping alarm ${a.id} from ${a.at}: too old to ring');
       } else {
         keep.add(a);
-        if (!ringing.contains(a.id)) {
-          _log.warning('Alarm ${a.id} due ${a.at} was never solved: ringing');
-          await _arm(a.id, now.add(const Duration(seconds: 6)), a.label);
-        }
+        due.add(a);
       }
     }
     await _writeOwed(keep);
+    // Several overdue alarms ring as one (solving it settles them all):
+    // only the latest is re-armed, so none can come back on its own later.
+    if (due.isNotEmpty && !due.any((a) => ringing.contains(a.id))) {
+      final last = due.reduce((a, b) => a.at.isAfter(b.at) ? a : b);
+      _log.warning('Alarm ${last.id} due ${last.at} was never solved: ringing');
+      await _arm(last.id, now.add(const Duration(seconds: 6)), last.label);
+    }
   }
 
   static List<WakeAlarm> _list(AlarmSet set) => [
@@ -239,6 +251,12 @@ class PluginWakeAlarmService implements WakeAlarmService {
   @override
   Future<void> cancel(int id) async {
     if (!_ready) return;
+    final owed = await _readOwed();
+    final due = owed.any((a) => a.id == id && !a.at.isAfter(DateTime.now()));
+    if (due) {
+      _log.warning('Alarm $id is due: it can only be solved, not cancelled');
+      return;
+    }
     try {
       await _forget(id);
       await Alarm.stop(id);
@@ -253,7 +271,14 @@ class PluginWakeAlarmService implements WakeAlarmService {
     if (!_ready) return false;
     try {
       final ok = await Alarm.stop(id);
-      if (ok) await _forget(id);
+      // Solving settles every alarm already due, so none rings again later.
+      if (ok) {
+        final now = DateTime.now();
+        await _writeOwed([
+          for (final a in await _readOwed())
+            if (a.id != id && a.at.isAfter(now)) a,
+        ]);
+      }
       _log.info('Alarm $id stopped: $ok');
       return ok;
     } catch (e, s) {
@@ -276,6 +301,26 @@ class PluginWakeAlarmService implements WakeAlarmService {
     } catch (e, s) {
       _log.warning('Alarm checks failed', e, s);
       return const AlarmChecks();
+    }
+  }
+
+  @override
+  Future<void> sumsShown() async {
+    if (!isSupported) return;
+    try {
+      await _channel.invokeMethod<void>('sumsShown');
+    } catch (e) {
+      _log.fine('sumsShown: $e');
+    }
+  }
+
+  @override
+  Future<void> ringingEnded() async {
+    if (!isSupported) return;
+    try {
+      await _channel.invokeMethod<void>('ringingEnded');
+    } catch (e) {
+      _log.fine('ringingEnded: $e');
     }
   }
 

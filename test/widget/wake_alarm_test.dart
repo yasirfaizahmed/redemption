@@ -90,6 +90,15 @@ class FakeWakeAlarms implements WakeAlarmService {
 
   @override
   Future<void> openSystemSetting(String which) async {}
+
+  var ended = 0;
+  var shown = 0;
+
+  @override
+  Future<void> sumsShown() async => shown++;
+
+  @override
+  Future<void> ringingEnded() async => ended++;
 }
 
 void main() {
@@ -147,7 +156,48 @@ void main() {
 
     await type(tester, '${problem.answer}');
     expect(alarms.stopped, [7]);
+    expect(alarms.ended, 1, reason: 'no longer over the lock screen');
     expect(find.text('Time to wake up'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Back while ringing never pops the page underneath', (
+    tester,
+  ) async {
+    usePhoneSurface(tester);
+    final env = await createEnv(tester, template: Templates.redemption);
+    addTearDown(() => disposeEnv(tester, env));
+    final alarms = FakeWakeAlarms();
+    await tester.pumpWidget(
+      buildApp(
+        env,
+        now: bedtime,
+        overrides: [
+          wakeAlarmServiceProvider.overrideWithValue(alarms),
+          alarmRandomProvider.overrideWithValue(Random(42)),
+        ],
+      ),
+    );
+    await settle(tester);
+    await tester.tap(find.byTooltip('Settings'));
+    await settle(tester);
+    expect(find.text('Ring in Redemption'), findsNothing);
+    final settingsTitle = find.text('Settings');
+    expect(settingsTitle, findsWidgets);
+
+    alarms.ring(WakeAlarm(id: 3, at: bedtime));
+    await settle(tester);
+    expect(alarms.shown, 1, reason: 'the guard may act only once sums show');
+    for (var i = 0; i < 3; i++) {
+      await tester.binding.handlePopRoute();
+      await settle(tester);
+    }
+    expect(find.text('Time to wake up'), findsOneWidget);
+
+    await type(tester, '${expected(1).single.answer}');
+    expect(find.text('Time to wake up'), findsNothing);
+    expect(settingsTitle, findsWidgets, reason: 'still on Settings');
+    expect(find.byTooltip('Settings'), findsNothing, reason: 'not home');
     expect(tester.takeException(), isNull);
   });
 

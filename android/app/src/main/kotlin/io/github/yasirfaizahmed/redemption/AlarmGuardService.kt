@@ -1,6 +1,7 @@
 package io.github.yasirfaizahmed.redemption
 
 import android.accessibilityservice.AccessibilityService
+import android.app.AlarmManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -8,6 +9,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.telecom.TelecomManager
 import android.util.Log
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
@@ -27,8 +29,40 @@ import com.gdelataillade.alarm.alarm.AlarmService
 class AlarmGuardService : AccessibilityService() {
     private val main = Handler(Looper.getMainLooper())
 
+    /**
+     * Ringing, or about to: a re-armed alarm (after a restart, or one never
+     * solved) is silent for a few seconds first, and that gap mustn't be a
+     * way out.
+     *
+     * Only while the sums are actually on offer ([sumsShownAt]), so a broken
+     * app can never lock the phone, and never for more than [MAX_GUARD_MILLIS].
+     */
     private val ringing: Boolean
-        get() = AlarmService.ringingAlarmIds.isNotEmpty()
+        get() {
+            val now = System.currentTimeMillis()
+            val active = AlarmService.ringingAlarmIds.isNotEmpty() || ringsVerySoon()
+            if (!active) {
+                // Nothing rings: the next alarm must show its sums again first.
+                sumsShownAt = 0L
+                guardingSince = 0L
+                return false
+            }
+            if (sumsShownAt == 0L) {
+                guardingSince = 0L
+                return false
+            }
+            if (guardingSince == 0L) guardingSince = now
+            return now - guardingSince < MAX_GUARD_MILLIS
+        }
+
+    private var guardingSince = 0L
+
+    private fun ringsVerySoon(): Boolean {
+        val alarms = getSystemService(AlarmManager::class.java) ?: return false
+        val next = alarms.nextAlarmClock ?: return false
+        if (next.showIntent?.creatorPackage != packageName) return false
+        return next.triggerTime - System.currentTimeMillis() <= SOON_MILLIS
+    }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null || !ringing) return
@@ -37,6 +71,8 @@ class AlarmGuardService : AccessibilityService() {
         if (pkg == packageName) return
 
         val cls = event.className?.toString() ?: ""
+        // Calls and emergency help always get through.
+        if (isCallOrEmergency(pkg, cls)) return
         if (pkg == "com.android.systemui" || pkg.endsWith(".systemui")) {
             // The power menu (and on some phones the shade) is SystemUI.
             if (isPowerMenu(cls, event)) {
@@ -54,6 +90,23 @@ class AlarmGuardService : AccessibilityService() {
             performGlobalAction(GLOBAL_ACTION_BACK)
         }
         bringBack()
+    }
+
+    private fun isCallOrEmergency(pkg: String, cls: String): Boolean {
+        if (cls.contains("Emergency", ignoreCase = true)) return true
+        if (CALL_PACKAGES.any { pkg == it || pkg.startsWith("$it.") }) return true
+        if (pkg.contains("dialer") || pkg.contains("incallui") ||
+            pkg.contains("emergency") || pkg.contains("safetyhub") ||
+            pkg.contains("telecom")
+        ) {
+            return true
+        }
+        val telecom = getSystemService(TelecomManager::class.java)
+        return try {
+            telecom?.defaultDialerPackage == pkg
+        } catch (e: SecurityException) {
+            false
+        }
     }
 
     private fun isPowerMenu(cls: String, event: AccessibilityEvent): Boolean {
@@ -105,9 +158,32 @@ class AlarmGuardService : AccessibilityService() {
     companion object {
         private const val TAG = "AlarmGuard"
 
-        private val POWER_WORDS = listOf(
-            "power off", "restart", "reboot", "emergency mode", "switch off",
+        /** How close a Redemption alarm counts as already ringing. */
+        private const val SOON_MILLIS = 45_000L
+
+        private val POWER_WORDS = listOf("power off", "restart", "reboot", "switch off")
+
+        private val CALL_PACKAGES = listOf(
+            "com.android.phone",
+            "com.android.server.telecom",
+            "com.android.emergency",
+            "com.google.android.apps.safetyhub",
+            "com.google.android.dialer",
+            "com.samsung.android.dialer",
+            "com.samsung.android.incallui",
+            "com.android.dialer",
+            "com.android.incallui",
         )
+
+        /** Never guard longer than this, whatever goes wrong. */
+        private const val MAX_GUARD_MILLIS = 60L * 60 * 1000
+
+        /**
+         * When the app last confirmed the sums are on screen (0: not yet, or
+         * the app's process restarted). Set from [MainActivity].
+         */
+        @Volatile
+        var sumsShownAt = 0L
 
         /** Whether the user has turned the guard on in Accessibility. */
         fun isEnabled(context: Context): Boolean {
