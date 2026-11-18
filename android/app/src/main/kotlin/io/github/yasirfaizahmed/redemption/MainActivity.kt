@@ -71,6 +71,12 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
                     "openSetting" -> result.success(openSetting(call.argument<String>("which") ?: ""))
+                    // Daily app limits: what's set, what's used, what's needed.
+                    "limits" -> result.success(limits())
+                    "setLimits" -> {
+                        val raw = call.argument<Map<String, Int>>("quotas") ?: emptyMap()
+                        result.success(AppLimits.setQuotas(this, raw))
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -109,6 +115,22 @@ class MainActivity : FlutterActivity() {
         )
     }
 
+    private fun limits(): Map<String, Any?> {
+        val autoTime = try {
+            Settings.Global.getInt(contentResolver, Settings.Global.AUTO_TIME) == 1
+        } catch (e: Settings.SettingNotFoundException) {
+            null
+        }
+        return mapOf(
+            "day" to AppLimits.currentDay(this),
+            "quotas" to AppLimits.quotas(this),
+            "used" to AppLimits.used(this),
+            "guard" to AlarmGuardService.isEnabled(this),
+            "mediaAccess" to MediaWatchService.isEnabled(this),
+            "autoTime" to autoTime,
+        )
+    }
+
     private fun openSetting(which: String): Boolean {
         val pkg = Uri.parse("package:$packageName")
         val intents = when (which) {
@@ -127,6 +149,18 @@ class MainActivity : FlutterActivity() {
                 },
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkg),
             )
+            "mediaAccess" -> listOfNotNull(
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS).putExtra(
+                        Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
+                        MediaWatchService.component(this).flattenToString(),
+                    )
+                } else {
+                    null
+                },
+                Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS),
+            )
+            "dateTime" -> listOf(Intent(Settings.ACTION_DATE_SETTINGS))
             "battery" -> listOf(
                 Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, pkg),
                 Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),

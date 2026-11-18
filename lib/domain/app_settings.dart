@@ -44,7 +44,7 @@ class AppSettings {
     this.gridEmojisPerTile = 6,
     this.gridCompactPerfect = false,
     this.alarmInApp = true,
-    this.alarmMathDifficulty = MathDifficulty.hard,
+    this.alarmMathDifficulty = MathDifficulty.medium,
     this.alarmMathCount = 1,
   });
 

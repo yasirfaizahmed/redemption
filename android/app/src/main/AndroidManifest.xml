@@ -72,6 +72,19 @@
                 android:resource="@xml/alarm_guard" />
         </service>
 
+        <!-- App limits: as "Notification access", lets the guard see which
+             limited app is playing in the background, count it and pause it
+             once its time is used up. Reads no notifications. -->
+        <service
+            android:name=".MediaWatchService"
+            android:exported="false"
+            android:label="@string/media_watch_label"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <!-- flutter_local_notifications: show scheduled reminders and restore them after reboot/update. -->
         <receiver
             android:exported="false"

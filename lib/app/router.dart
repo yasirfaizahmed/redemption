@@ -9,6 +9,7 @@ import '../features/insights/tracker_detail_screen.dart';
 import '../features/journey/journey_editor_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/settings/about_screen.dart';
+import '../features/settings/app_limits_screen.dart';
 import '../features/settings/diagnostics_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/today/today_screen.dart';
@@ -32,6 +33,7 @@ abstract final class Routes {
   static const settings = '/settings';
   static const diagnostics = '/settings/diagnostics';
   static const about = '/settings/about';
+  static const appLimits = '/settings/limits';
 
   /// Today tab, opening the entry sheet of [trackerId].
   static String logTracker(int trackerId) => '$today?log=$trackerId';
@@ -154,6 +156,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, _) => const DiagnosticsScreen(),
           ),
           GoRoute(path: 'about', builder: (_, _) => const AboutScreen()),
+          GoRoute(path: 'limits', builder: (_, _) => const AppLimitsScreen()),
         ],
       ),
     ],

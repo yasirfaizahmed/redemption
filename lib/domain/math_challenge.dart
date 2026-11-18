@@ -2,8 +2,10 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
-/// How hard the sums are that stop the wake-up alarm.
+/// How hard the sums are that stop the wake-up alarm, easiest first.
 enum MathDifficulty {
+  easy('Easy', '27 + 48'),
+  light('Light', '7 × 8 + 15'),
   medium('Medium', '47 × 6 + 38'),
   hard('Hard', '38 × 17 + 469'),
   veryHard('Very hard', '248 × 37 − 569');
@@ -14,7 +16,7 @@ enum MathDifficulty {
 
   static MathDifficulty parse(String? name) => values.firstWhere(
     (d) => d.name == name,
-    orElse: () => MathDifficulty.hard,
+    orElse: () => MathDifficulty.medium,
   );
 }
 
@@ -51,6 +53,19 @@ abstract final class MathChallenge {
 
   static MathProblem generate(Random rnd, MathDifficulty difficulty) {
     switch (difficulty) {
+      case MathDifficulty.easy:
+        // Always a carry, so it still needs a moment's thought.
+        while (true) {
+          final a = _awkward(rnd, 12, 89);
+          final b = _awkward(rnd, 12, 89);
+          if (a % 10 + b % 10 < 10) continue;
+          return MathProblem('$a + $b', a + b);
+        }
+      case MathDifficulty.light:
+        final a = 3 + rnd.nextInt(7); // 3–9
+        final b = 3 + rnd.nextInt(7);
+        final c = _awkward(rnd, 11, 49);
+        return MathProblem('$a × $b + $c', a * b + c);
       case MathDifficulty.medium:
         final a = _awkward(rnd, 12, 99);
         final b = 3 + rnd.nextInt(7); // 3–9

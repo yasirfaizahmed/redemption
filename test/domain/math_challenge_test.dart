@@ -8,11 +8,12 @@ void main() {
   test('every sum is right, awkward and of the chosen size', () {
     final rnd = Random(7);
     final shape = {
+      MathDifficulty.light: RegExp(r'^(\d) × (\d) \+ (\d{2})$'),
       MathDifficulty.medium: RegExp(r'^(\d{2}) × (\d) \+ (\d{2})$'),
       MathDifficulty.hard: RegExp(r'^(\d{2}) × (\d{2}) \+ (\d{3})$'),
       MathDifficulty.veryHard: RegExp(r'^(\d{3}) × (\d{2}) − (\d{3})$'),
     };
-    for (final d in MathDifficulty.values) {
+    for (final d in shape.keys) {
       for (var i = 0; i < 500; i++) {
         final p = MathChallenge.generate(rnd, d);
         final m = shape[d]!.firstMatch(p.text);
@@ -22,12 +23,39 @@ void main() {
         final c = int.parse(m[3]!);
         final expected = d == MathDifficulty.veryHard ? a * b - c : a * b + c;
         expect(p.answer, expected, reason: p.text);
-        expect(a % 10, isNot(0), reason: 'no round numbers: ${p.text}');
+        if (d != MathDifficulty.light) {
+          expect(a % 10, isNot(0), reason: 'no round numbers: ${p.text}');
+        }
         expect(c % 10, isNot(0), reason: 'no round numbers: ${p.text}');
         expect(p.answer, greaterThan(0));
       }
     }
   });
+
+  test('easy sums are two-digit additions that always carry', () {
+    final rnd = Random(3);
+    final shape = RegExp(r'^(\d{2}) \+ (\d{2})$');
+    for (var i = 0; i < 500; i++) {
+      final p = MathChallenge.generate(rnd, MathDifficulty.easy);
+      final m = shape.firstMatch(p.text);
+      expect(m, isNotNull, reason: p.text);
+      final a = int.parse(m![1]!);
+      final b = int.parse(m[2]!);
+      expect(p.answer, a + b);
+      expect(a % 10 + b % 10, greaterThanOrEqualTo(10), reason: p.text);
+    }
+  });
+
+  test(
+    'levels go from easiest to hardest, and old saved levels still load',
+    () {
+      expect(MathDifficulty.values.first, MathDifficulty.easy);
+      expect(MathDifficulty.values.last, MathDifficulty.veryHard);
+      for (final d in MathDifficulty.values) {
+        expect(MathDifficulty.parse(d.name), d);
+      }
+    },
+  );
 
   test('only the exact answer solves it', () {
     const p = MathProblem('38 × 17 + 469', 1115);
@@ -55,7 +83,7 @@ void main() {
   test('alarm settings are saved, with safe defaults', () {
     const d = AppSettings();
     expect(d.alarmInApp, isTrue);
-    expect(d.alarmMathDifficulty, MathDifficulty.hard);
+    expect(d.alarmMathDifficulty, MathDifficulty.medium);
     expect(d.alarmMathCount, 1);
     final s = d.copyWith(
       alarmInApp: false,
@@ -75,7 +103,7 @@ void main() {
     );
     expect(
       AppSettings.fromMap(const {'alarmMath': 'nonsense'}).alarmMathDifficulty,
-      MathDifficulty.hard,
+      MathDifficulty.medium,
     );
   });
 }

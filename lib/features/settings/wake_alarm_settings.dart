@@ -110,30 +110,34 @@ class _WakeAlarmSectionState extends ConsumerState<WakeAlarmSection>
       if (s.alarmInApp) ...[
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-          child: Text('Sums to stop it', style: theme.textTheme.titleSmall),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: SegmentedButton<MathDifficulty>(
-            showSelectedIcon: false,
-            segments: [
-              for (final d in MathDifficulty.values)
-                ButtonSegment(
-                  value: d,
-                  label: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(d.label, maxLines: 1, softWrap: false),
-                  ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'How hard the sums are',
+                  style: theme.textTheme.titleSmall,
                 ),
+              ),
+              Text(
+                s.alarmMathDifficulty.label,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: scheme.primary,
+                ),
+              ),
             ],
-            selected: {s.alarmMathDifficulty},
-            onSelectionChanged: (v) =>
-                _save((x) => x.copyWith(alarmMathDifficulty: v.first)),
           ),
         ),
+        _DifficultySlider(
+          value: s.alarmMathDifficulty,
+          onChanged: (d) => _save((x) => x.copyWith(alarmMathDifficulty: d)),
+        ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-          child: Text('e.g. ${s.alarmMathDifficulty.example}', style: muted),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+          child: Text(
+            'e.g. ${s.alarmMathDifficulty.example} — easier wakes you less, '
+            'but still needs a moment’s thought.',
+            style: muted,
+          ),
         ),
         ListTile(
           title: const Text('How many in a row'),
@@ -253,6 +257,47 @@ class _WakeAlarmSectionState extends ConsumerState<WakeAlarmSection>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: children,
+    );
+  }
+}
+
+/// Easy … Very hard, one stop per level.
+class _DifficultySlider extends StatelessWidget {
+  const _DifficultySlider({required this.value, required this.onChanged});
+
+  final MathDifficulty value;
+  final ValueChanged<MathDifficulty> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).textTheme.labelSmall
+        ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant);
+    const levels = MathDifficulty.values;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Slider(
+          value: value.index.toDouble(),
+          max: (levels.length - 1).toDouble(),
+          divisions: levels.length - 1,
+          label: value.label,
+          semanticFormatterCallback: (v) => levels[v.round()].label,
+          onChanged: (v) {
+            final d = levels[v.round()];
+            if (d != value) onChanged(d);
+          },
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(levels.first.label, style: muted),
+              Text(levels.last.label, style: muted),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

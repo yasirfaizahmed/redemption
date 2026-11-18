@@ -18,6 +18,7 @@ import '../domain/dashboard.dart';
 import '../domain/models.dart';
 import '../domain/scoring.dart';
 import '../services/alarm_service.dart';
+import '../services/app_limits_service.dart';
 import '../services/notification_service.dart';
 import '../services/wake_alarm_service.dart';
 
@@ -46,6 +47,11 @@ final alarmServiceProvider = Provider<AlarmService>(
 /// initialised service; this default sets nothing off Android).
 final wakeAlarmServiceProvider = Provider<WakeAlarmService>(
   (ref) => PluginWakeAlarmService(),
+);
+
+/// Daily app limits, kept by the phone.
+final appLimitsServiceProvider = Provider<AppLimitsService>(
+  (ref) => ChannelAppLimitsService(),
 );
 
 /// Alarms ringing right now: while there are any, the sums are on screen.

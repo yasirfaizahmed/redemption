@@ -3,6 +3,27 @@
 Every release's notes come from its section below: CI copies the section into
 the GitHub release, and the app shows it under “What’s new” before updating.
 
+## 1.9.0
+
+- **Gentler wake-up sums, your choice.** *Settings → Wake-up alarm* now has a
+  slider with five levels: Easy (27 + 48), Light (7 × 8 + 15), Medium,
+  Hard and Very hard. New installs start on Medium.
+- **Different sum:** stuck on one while half asleep? Swap it for another of
+  the same level, as often as you like. The alarm still only stops once a sum
+  is solved.
+- **Daily app limits** (*Settings → Daily app limits*): give Chrome,
+  Instagram, YouTube (with Vanced and ReVanced), YouTube Music (with Vanced
+  and ReVanced) and Spotify a daily time limit, or block one all day. Once
+  locked, a limit can never be raised or removed — only made stricter. When
+  the time is used up the app closes at once and won't open again until
+  midnight.
+- Needs the alarm guard (Accessibility). With *Background listening*
+  (notification access), music and videos playing in the background count
+  too and are paused when time is up. While limits are set, the guard can't
+  be turned off and Redemption can't be uninstalled.
+- Day boundaries follow the network's clock where Android provides it, so
+  moving the phone's clock forward doesn't hand out a new day early.
+
 ## 1.8.0
 
 - **Redemption's own wake-up alarm.** Tap a wake-up time after *Now* on Sleep

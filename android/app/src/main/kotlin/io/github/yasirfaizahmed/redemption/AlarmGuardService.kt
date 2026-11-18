@@ -2,17 +2,25 @@ package io.github.yasirfaizahmed.redemption
 
 import android.accessibilityservice.AccessibilityService
 import android.app.AlarmManager
+import android.app.KeyguardManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.media.session.MediaController
+import android.media.session.MediaSessionManager
+import android.media.session.PlaybackState
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
+import android.os.SystemClock
 import android.provider.Settings
 import android.telecom.TelecomManager
 import android.util.Log
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
+import android.view.inputmethod.InputMethodManager
+import android.widget.Toast
 import com.gdelataillade.alarm.alarm.AlarmService
 
 /**
@@ -21,10 +29,15 @@ import com.gdelataillade.alarm.alarm.AlarmService
  * uninstall dialog and Settings (no uninstalling or force-stopping), takes
  * them back from any other app, and swallows the volume keys.
  *
- * The user turns it on in Accessibility settings. It reads nothing and does
- * nothing while no alarm rings. A forced restart (holding power ~10 s) is
- * done by the hardware and can't be stopped by any app; the alarm rings
- * again when the phone is back on.
+ * The user turns it on in Accessibility settings. A forced restart (holding
+ * power ~10 s) is done by the hardware and can't be stopped by any app; the
+ * alarm rings again when the phone is back on.
+ *
+ * It also keeps the daily app limits ([AppLimits]): it counts the time a
+ * limited app is on screen (and, with [MediaWatchService], playing in the
+ * background), sends you home from it once today's time is used up, pauses
+ * its playback, and — while any limit is set — won't let itself be turned
+ * off or Redemption be uninstalled.
  */
 class AlarmGuardService : AccessibilityService() {
     private val main = Handler(Looper.getMainLooper())
@@ -64,10 +77,28 @@ class AlarmGuardService : AccessibilityService() {
         return next.triggerTime - System.currentTimeMillis() <= SOON_MILLIS
     }
 
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        lastTick = SystemClock.elapsedRealtime()
+        main.removeCallbacks(tick)
+        main.postDelayed(tick, TICK_MILLIS)
+    }
+
+    override fun onDestroy() {
+        main.removeCallbacksAndMessages(null)
+        super.onDestroy()
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event == null || !ringing) return
+        if (event == null) return
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
+        try {
+            onWindowForLimits(pkg, event)
+        } catch (e: Exception) {
+            Log.w(TAG, "App limits", e)
+        }
+        if (!ringing) return
         if (pkg == packageName) return
 
         val cls = event.className?.toString() ?: ""
@@ -142,6 +173,139 @@ class AlarmGuardService : AccessibilityService() {
         }
     }
 
+    // ---- Daily app limits ------------------------------------------------
+
+    /** The limited app on screen (its group id), if any. */
+    private var foreground: String? = null
+    private var lastTick = 0L
+    private var lastNotice = 0L
+
+    private val tick = object : Runnable {
+        override fun run() {
+            try {
+                countAndEnforce()
+            } catch (e: Exception) {
+                Log.w(TAG, "App limits", e)
+            }
+            main.postDelayed(this, TICK_MILLIS)
+        }
+    }
+
+    private fun onWindowForLimits(pkg: String, event: AccessibilityEvent) {
+        if (isPassing(pkg)) return
+        val group = AppLimits.groupOf(pkg)?.id
+        if (group != foreground) {
+            countAndEnforce() // time so far goes to the app being left
+            foreground = group
+        }
+        if (group != null && AppLimits.isUsedUp(this, group)) block(group)
+        if (AppLimits.quotas(this).isNotEmpty()) protectLimits(pkg, event)
+    }
+
+    /** Shade, keyboard and system dialogs don't change the app in use. */
+    private fun isPassing(pkg: String): Boolean {
+        if (pkg == "android" || pkg == "com.android.systemui" || pkg.endsWith(".systemui")) {
+            return true
+        }
+        val ime = getSystemService(InputMethodManager::class.java) ?: return false
+        return ime.enabledInputMethodList.any { it.packageName == pkg }
+    }
+
+    /** Adds the time since the last tick to whatever is in use, then blocks. */
+    private fun countAndEnforce() {
+        val now = SystemClock.elapsedRealtime()
+        val delta = (now - lastTick).coerceIn(0L, MAX_TICK_GAP_MILLIS)
+        lastTick = now
+        val quotas = AppLimits.quotas(this)
+        if (quotas.isEmpty()) return
+
+        val inUse = mutableSetOf<String>()
+        val shown = foreground
+        if (shown != null && shown in quotas && screenInUse()) inUse += shown
+        val playing = playingSessions()
+        playing.forEach { (group, _) -> if (group in quotas) inUse += group }
+        inUse.forEach { AppLimits.add(this, it, delta) }
+
+        if (shown != null && screenInUse() && AppLimits.isUsedUp(this, shown)) block(shown)
+        playing.forEach { (group, controller) ->
+            if (AppLimits.isUsedUp(this, group)) pause(controller)
+        }
+    }
+
+    private fun screenInUse(): Boolean {
+        val power = getSystemService(PowerManager::class.java)
+        val keyguard = getSystemService(KeyguardManager::class.java)
+        return power?.isInteractive == true && keyguard?.isKeyguardLocked != true
+    }
+
+    /** Limited apps playing in the background (needs notification access). */
+    private fun playingSessions(): List<Pair<String, MediaController>> {
+        if (!MediaWatchService.isEnabled(this)) return emptyList()
+        val sessions = getSystemService(MediaSessionManager::class.java) ?: return emptyList()
+        return try {
+            sessions.getActiveSessions(MediaWatchService.component(this)).mapNotNull { c ->
+                val group = AppLimits.groupOf(c.packageName)?.id
+                if (group != null && c.playbackState?.state == PlaybackState.STATE_PLAYING) {
+                    group to c
+                } else {
+                    null
+                }
+            }
+        } catch (e: SecurityException) {
+            emptyList()
+        }
+    }
+
+    private fun pause(controller: MediaController) {
+        Log.i(TAG, "${controller.packageName}: today's time is used up, pausing")
+        controller.transportControls.pause()
+    }
+
+    /** Today's time is used up: home, with its playback paused. */
+    private fun block(group: String) {
+        Log.i(TAG, "$group: today's time is used up")
+        performGlobalAction(GLOBAL_ACTION_HOME)
+        playingSessions().forEach { (g, c) -> if (g == group) pause(c) }
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastNotice > NOTICE_GAP_MILLIS) {
+            lastNotice = now
+            Toast.makeText(
+                this,
+                "Today’s time for this app is used up. It opens again after midnight.",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
+
+    /**
+     * While limits are set, the guard can't be switched off and Redemption
+     * can't be uninstalled: back out of those screens.
+     */
+    private fun protectLimits(pkg: String, event: AccessibilityEvent) {
+        val texts = event.text.mapNotNull { it?.toString()?.trim() }
+        val joined = texts.joinToString(" ").lowercase()
+        val appName = applicationInfo.loadLabel(packageManager).toString()
+        val guardName = getString(R.string.alarm_guard_label)
+        val uninstallingUs = pkg.contains("packageinstaller") &&
+            joined.contains("uninstall") &&
+            texts.any { it.contains(appName, ignoreCase = true) }
+        val guardSettings = pkg.contains("settings") &&
+            texts.any { it.equals(guardName, ignoreCase = true) }
+        if (uninstallingUs || guardSettings) {
+            Log.i(TAG, "App limits are locked: closing ${event.className}")
+            performGlobalAction(GLOBAL_ACTION_BACK)
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastNotice > NOTICE_GAP_MILLIS) {
+                lastNotice = now
+                Toast.makeText(
+                    this,
+                    "Your app limits are locked — the guard stays on.",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
     /** Volume keys do nothing while the alarm rings. */
     override fun onKeyEvent(event: KeyEvent?): Boolean {
         if (event == null || !ringing) return false
@@ -174,6 +338,14 @@ class AlarmGuardService : AccessibilityService() {
             "com.android.dialer",
             "com.android.incallui",
         )
+
+        /** How often limited apps' time is counted. */
+        private const val TICK_MILLIS = 10_000L
+
+        /** A late tick (the phone dozed) counts at most this much. */
+        private const val MAX_TICK_GAP_MILLIS = 30_000L
+
+        private const val NOTICE_GAP_MILLIS = 4_000L
 
         /** Never guard longer than this, whatever goes wrong. */
         private const val MAX_GUARD_MILLIS = 60L * 60 * 1000

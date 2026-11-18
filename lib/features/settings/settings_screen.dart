@@ -269,6 +269,17 @@ class SettingsScreen extends ConsumerWidget {
 
           const WakeAlarmSection(),
 
+          const SectionHeader('Screen time'),
+          ListTile(
+            leading: const Icon(Icons.hourglass_bottom_rounded),
+            title: const Text('Daily app limits'),
+            subtitle: const Text(
+              'Chrome, Instagram, YouTube, YouTube Music, Spotify — locked, '
+              'back at midnight',
+            ),
+            onTap: () => context.push(Routes.appLimits),
+          ),
+
           const SectionHeader('Journey'),
           ListTile(
             leading: const Icon(Icons.flag_outlined),

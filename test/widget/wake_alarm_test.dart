@@ -115,7 +115,7 @@ void main() {
 
   /// The sums the ring screen will ask, with the same seed.
   List<MathProblem> expected(int count) =>
-      MathChallenge.generateAll(Random(42), MathDifficulty.hard, count);
+      MathChallenge.generateAll(Random(42), MathDifficulty.medium, count);
 
   testWidgets('a ringing alarm covers the app until its sum is solved', (
     tester,
@@ -149,12 +149,24 @@ void main() {
     await settle(tester);
     expect(find.text('Time to wake up'), findsOneWidget);
 
+    // Another sum of the same level, if this one is a struggle.
+    await tester.tap(find.text('Different sum'));
+    await settle(tester);
+    expect(find.text('${problem.text} = ?'), findsNothing);
+    final swapped = RegExp(r'^(.+) = \?$').firstMatch(
+      tester.widgetList<Text>(find.textContaining(' = ?')).single.data!,
+    )![1]!;
+    final a = int.parse(swapped.split(' × ')[0]);
+    final b = int.parse(swapped.split(' × ')[1].split(' + ')[0]);
+    final c = int.parse(swapped.split(' + ')[1]);
+    final answer = a * b + c;
+
     // A wrong answer keeps it ringing.
-    await type(tester, '${problem.answer + 1}');
+    await type(tester, '${answer + 1}');
     expect(alarms.stopped, isEmpty);
     expect(find.text('Not right — try again'), findsOneWidget);
 
-    await type(tester, '${problem.answer}');
+    await type(tester, '$answer');
     expect(alarms.stopped, [7]);
     expect(alarms.ended, 1, reason: 'no longer over the lock screen');
     expect(find.text('Time to wake up'), findsNothing);
@@ -316,12 +328,18 @@ void main() {
       const Offset(0, -300),
     );
     await settle(tester);
-    await tester.tap(find.text('Very hard'));
+    // Slide all the way to the easiest level.
+    final slider = find.byType(Slider);
+    await tester.drag(slider, const Offset(-1000, 0));
     await settle(tester);
     expect(
-      find.text('e.g. ${MathDifficulty.veryHard.example}'),
+      find.textContaining('e.g. ${MathDifficulty.easy.example}'),
       findsOneWidget,
     );
+    final saved = await tester.runAsync(
+      () => SettingsRepository(env.db).load(),
+    );
+    expect(saved!.alarmMathDifficulty, MathDifficulty.easy);
 
     await tester.dragUntilVisible(
       find.text('Alarm guard'),

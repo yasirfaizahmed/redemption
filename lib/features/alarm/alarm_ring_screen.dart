@@ -129,6 +129,22 @@ class _AlarmRingScreenState extends ConsumerState<AlarmRingScreen> {
 
   bool get _solved => _index >= _problems.length;
 
+  /// Stuck on this one: another of the same level instead.
+  void _swap() {
+    if (_stopping || _solved) return;
+    final settings = ref.read(settingsValueProvider);
+    final rnd = ref.read(alarmRandomProvider);
+    var next = MathChallenge.generate(rnd, settings.alarmMathDifficulty);
+    for (var i = 0; i < 20 && _problems.any((p) => p.text == next.text); i++) {
+      next = MathChallenge.generate(rnd, settings.alarmMathDifficulty);
+    }
+    setState(() {
+      _problems[_index] = next;
+      _typed = '';
+      _wrong = false;
+    });
+  }
+
   void _press(String digit) {
     if (_stopping || _solved || _typed.length >= _maxDigits) return;
     unawaited(HapticFeedback.selectionClick());
@@ -224,7 +240,7 @@ class _AlarmRingScreenState extends ConsumerState<AlarmRingScreen> {
                           const SizedBox(height: 12),
                           if (_solved)
                             _Stopping(failed: _stopFailed, onRetry: _stop)
-                          else
+                          else ...[
                             _ProblemCard(
                               problem: _problems[_index],
                               number: _index + 1,
@@ -232,6 +248,14 @@ class _AlarmRingScreenState extends ConsumerState<AlarmRingScreen> {
                               typed: _typed,
                               wrong: _wrong,
                             ),
+                            Align(
+                              child: TextButton.icon(
+                                onPressed: _swap,
+                                icon: const Icon(Icons.refresh_rounded),
+                                label: const Text('Different sum'),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
