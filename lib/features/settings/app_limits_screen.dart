@@ -108,8 +108,9 @@ class _AppLimitsScreenState extends ConsumerState<AppLimitsScreen>
           '$lines\n\n'
           'Once locked, a limit can never be raised or removed — only made '
           'stricter. Each day’s time starts again at midnight. While limits '
-          'are set, the alarm guard can’t be turned off and Redemption can’t '
-          'be uninstalled.',
+          'are set, the alarm guard and background listening can’t be turned '
+          'off, and Redemption can’t be uninstalled, force-stopped or '
+          'cleared.',
       confirmLabel: 'Lock for good',
     );
   }
@@ -174,6 +175,9 @@ class _AppLimitsScreenState extends ConsumerState<AppLimitsScreen>
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: scheme.onSurfaceVariant,
     );
+    final needsListening = _draft.keys.any(
+      LimitedApp.playsInBackground.contains,
+    );
     return ListView(
       padding: const EdgeInsets.only(bottom: 32),
       children: [
@@ -202,8 +206,8 @@ class _AppLimitsScreenState extends ConsumerState<AppLimitsScreen>
           okText: 'Music and videos playing in the background count too',
           fixText:
               'Allow notification access for “Redemption app limits”, so '
-              'Spotify and YouTube Music playing in the background count and '
-              'are paused when time is up.',
+              'YouTube, YouTube Music and Spotify playing in the background '
+              'count and are paused when time is up. Needed to limit them.',
           onFix: () => service.openSystemSetting('mediaAccess'),
         ),
         if (s.autoTime == false)
@@ -244,7 +248,10 @@ class _AppLimitsScreenState extends ConsumerState<AppLimitsScreen>
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             child: FilledButton.icon(
-              onPressed: s.guard && !_saving ? () => _lockDraft(s) : null,
+              onPressed:
+                  s.guard && (s.mediaAccess || !needsListening) && !_saving
+                  ? () => _lockDraft(s)
+                  : null,
               icon: const Icon(Icons.lock_rounded),
               label: const Text('Lock limits'),
             ),
@@ -253,15 +260,24 @@ class _AppLimitsScreenState extends ConsumerState<AppLimitsScreen>
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: Text('Turn on the alarm guard first.', style: muted),
+            )
+          else if (needsListening && !s.mediaAccess)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Text(
+                'Turn on background listening first — YouTube, YouTube Music '
+                'and Spotify keep playing in the background otherwise.',
+                style: muted,
+              ),
             ),
         ],
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
           child: Text(
             'Time counts while an app is on screen (and, with background '
-            'listening, while it plays). Other browsers and apps aren’t '
-            'limited. Clearing Redemption’s storage would remove the limits — '
-            'along with your whole journal.',
+            'listening, while it plays). Chrome pages opened inside other '
+            'apps (sign-ins, payment checks) aren’t counted or blocked. Other '
+            'browsers and apps aren’t limited.',
             style: muted,
           ),
         ),

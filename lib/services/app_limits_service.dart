@@ -17,6 +17,10 @@ class LimitedApp {
   /// What else shares this app's time.
   final String covers;
 
+  /// Apps that play in the background (Spotify, YouTube Music, and YouTube
+  /// with Vanced): their limit needs background listening counted.
+  static const playsInBackground = {'youtube', 'ytmusic', 'spotify'};
+
   static const all = [
     LimitedApp('chrome', 'Chrome', 'Chrome, Beta, Dev and Canary'),
     LimitedApp('instagram', 'Instagram', 'Instagram and Instagram Lite'),

@@ -19,10 +19,15 @@ the GitHub release, and the app shows it under “What’s new” before updatin
   midnight.
 - Needs the alarm guard (Accessibility). With *Background listening*
   (notification access), music and videos playing in the background count
-  too and are paused when time is up. While limits are set, the guard can't
-  be turned off and Redemption can't be uninstalled.
-- Day boundaries follow the network's clock where Android provides it, so
-  moving the phone's clock forward doesn't hand out a new day early.
+  too and are paused when time is up — required to limit YouTube, YouTube
+  Music or Spotify. While limits are set, the guard and background listening
+  can't be turned off, and Redemption can't be uninstalled, force-stopped or
+  cleared. A pinned app gets the screen locked instead.
+- Time counts in split screen and picture-in-picture too. Chrome pages opened
+  inside other apps (sign-ins, payment checks) are never blocked.
+- Changing the clock or time zone doesn't hand out a new day early: the day
+  follows network time where Android provides it, the phone's uptime
+  otherwise, and the time zone the limits were set in.
 
 ## 1.8.0
 

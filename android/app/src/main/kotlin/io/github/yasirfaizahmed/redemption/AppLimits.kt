@@ -3,9 +3,11 @@ package io.github.yasirfaizahmed.redemption
 import android.content.Context
 import android.os.Build
 import android.os.SystemClock
+import android.provider.Settings
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 /**
  * Daily time limits for the apps that eat the day.
@@ -77,39 +79,85 @@ object AppLimits {
             if (GROUPS.none { it.id == id }) return "Unknown app: $id"
             if (n < 0 || n > MAX_MINUTES) return "Minutes out of range: $n"
         }
-        val e = prefs(c).edit()
+        val p = prefs(c)
+        val e = p.edit()
         for ((id, n) in wanted) e.putInt("quota.$id", n)
+        // Midnight is the midnight of where the limits were set, so changing
+        // the phone's time zone can't bring the next day sooner.
+        if (!p.contains("zone")) e.putString("zone", TimeZone.getDefault().id)
         return if (e.commit()) null else "Couldn't save the limits."
     }
 
     /**
-     * Now, from the network's clock when the phone knows it (Android 13+), so
-     * moving the phone's clock forward doesn't start a new day early.
+     * Now, and whether it's the network's word for it.
+     *
+     * The network's clock is trusted when Android has it (13+). Otherwise,
+     * within one boot, time runs from an anchor by the phone's own uptime, so
+     * changing the clock does nothing until the phone restarts.
      */
-    private fun trustedNow(): Long {
+    private fun trustedNow(c: Context): Pair<Long, Boolean> {
+        val p = prefs(c)
+        val elapsed = SystemClock.elapsedRealtime()
+        val boot = bootCount(c)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             try {
-                return SystemClock.currentNetworkTimeClock().millis()
+                val net = SystemClock.currentNetworkTimeClock().millis()
+                val sameBoot = boot != null && p.getInt("anchorBoot", -1) == boot
+                val projected = p.getLong("anchorWall", 0L) + (elapsed - p.getLong("anchorElapsed", 0L))
+                if (!sameBoot || kotlin.math.abs(projected - net) > 60_000L) {
+                    anchor(p, boot, net, elapsed)
+                }
+                return net to true
             } catch (e: Exception) {
-                // No network time yet: the phone's clock it is.
+                // No network time yet.
             }
         }
-        return System.currentTimeMillis()
+        if (boot != null && p.getInt("anchorBoot", -1) == boot && p.contains("anchorWall")) {
+            return p.getLong("anchorWall", 0L) + (elapsed - p.getLong("anchorElapsed", 0L)) to false
+        }
+        val wall = System.currentTimeMillis()
+        anchor(p, boot, wall, elapsed)
+        return wall to false
     }
 
-    private fun dayOf(millis: Long): String =
-        SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(millis))
+    private fun anchor(p: android.content.SharedPreferences, boot: Int?, wall: Long, elapsed: Long) {
+        p.edit()
+            .putInt("anchorBoot", boot ?: -1)
+            .putLong("anchorWall", wall)
+            .putLong("anchorElapsed", elapsed)
+            .apply()
+    }
+
+    private fun bootCount(c: Context): Int? = try {
+        Settings.Global.getInt(c.contentResolver, Settings.Global.BOOT_COUNT)
+    } catch (e: Exception) {
+        null
+    }
+
+    private fun dayOf(c: Context, millis: Long): String {
+        val format = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        prefs(c).getString("zone", null)?.let { format.timeZone = TimeZone.getTimeZone(it) }
+        return format.format(Date(millis))
+    }
 
     /**
-     * The day being counted. A later day starts afresh; an earlier one (the
-     * clock moved back) keeps counting against the later day.
+     * The day being counted. A later day starts afresh. An earlier one keeps
+     * counting against the later day — unless the network says the later day
+     * was never real (a clock that had jumped ahead), so a wrong clock can't
+     * freeze the limits.
      */
     @Synchronized
     fun currentDay(c: Context): String {
         val p = prefs(c)
-        val today = dayOf(trustedNow())
+        val (now, fromNetwork) = trustedNow(c)
+        val today = dayOf(c, now)
         val stored = p.getString("day", null)
-        if (stored != null && today <= stored) return stored
+        if (stored == today) return today
+        if (stored != null && today < stored) {
+            if (!fromNetwork) return stored
+            p.edit().putString("day", today).apply() // keep what was used
+            return today
+        }
         val e = p.edit().putString("day", today)
         for (g in GROUPS) e.remove("used.${g.id}")
         e.apply()

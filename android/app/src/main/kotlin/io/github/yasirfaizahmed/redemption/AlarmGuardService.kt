@@ -1,6 +1,7 @@
 package io.github.yasirfaizahmed.redemption
 
 import android.accessibilityservice.AccessibilityService
+import android.app.ActivityManager
 import android.app.AlarmManager
 import android.app.KeyguardManager
 import android.content.ComponentName
@@ -19,7 +20,7 @@ import android.telecom.TelecomManager
 import android.util.Log
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
-import android.view.inputmethod.InputMethodManager
+import android.view.accessibility.AccessibilityWindowInfo
 import android.widget.Toast
 import com.gdelataillade.alarm.alarm.AlarmService
 
@@ -175,10 +176,18 @@ class AlarmGuardService : AccessibilityService() {
 
     // ---- Daily app limits ------------------------------------------------
 
-    /** The limited app on screen (its group id), if any. */
-    private var foreground: String? = null
     private var lastTick = 0L
     private var lastNotice = 0L
+
+    /** Limited apps that were playing in the background at the last tick. */
+    private var playingBefore = emptySet<String>()
+
+    /** Chrome's last window was a Custom Tab inside another app (a sign-in, a payment check). */
+    private var chromeIsCustomTab = false
+
+    /** The last app sent home, and when: if it's still there, home didn't work. */
+    private var lastBlocked: String? = null
+    private var lastBlockedAt = 0L
 
     private val tick = object : Runnable {
         override fun run() {
@@ -192,44 +201,68 @@ class AlarmGuardService : AccessibilityService() {
     }
 
     private fun onWindowForLimits(pkg: String, event: AccessibilityEvent) {
-        if (isPassing(pkg)) return
+        val quotas = AppLimits.quotas(this)
+        if (quotas.isEmpty()) return
+        val cls = event.className?.toString() ?: ""
         val group = AppLimits.groupOf(pkg)?.id
-        if (group != foreground) {
-            countAndEnforce() // time so far goes to the app being left
-            foreground = group
+        if (group == "chrome") chromeIsCustomTab = cls.contains("customtabs", ignoreCase = true)
+        if (group != null && group in quotas && !exempt(group) && AppLimits.isUsedUp(this, group)) {
+            block(group)
         }
-        if (group != null && AppLimits.isUsedUp(this, group)) block(group)
-        if (AppLimits.quotas(this).isNotEmpty()) protectLimits(pkg, event)
+        protectLimits(pkg, cls, event)
     }
 
-    /** Shade, keyboard and system dialogs don't change the app in use. */
-    private fun isPassing(pkg: String): Boolean {
-        if (pkg == "android" || pkg == "com.android.systemui" || pkg.endsWith(".systemui")) {
-            return true
+    /** Custom Tabs are other apps' sign-ins and payment checks: never blocked. */
+    private fun exempt(group: String) = group == "chrome" && chromeIsCustomTab
+
+    /** Limited apps with a window on screen now — split screen and picture-in-picture too. */
+    private fun onScreen(): Set<String> {
+        if (!screenInUse()) return emptySet()
+        return try {
+            windows
+                .filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+                .mapNotNull { w ->
+                    val pkg = w.root?.packageName?.toString() ?: return@mapNotNull null
+                    AppLimits.groupOf(pkg)?.id
+                }
+                .filterNot { exempt(it) }
+                .toSet()
+        } catch (e: Exception) {
+            emptySet()
         }
-        val ime = getSystemService(InputMethodManager::class.java) ?: return false
-        return ime.enabledInputMethodList.any { it.packageName == pkg }
     }
 
     /** Adds the time since the last tick to whatever is in use, then blocks. */
     private fun countAndEnforce() {
         val now = SystemClock.elapsedRealtime()
-        val delta = (now - lastTick).coerceIn(0L, MAX_TICK_GAP_MILLIS)
+        val gap = (now - lastTick).coerceAtLeast(0L)
         lastTick = now
         val quotas = AppLimits.quotas(this)
-        if (quotas.isEmpty()) return
+        if (quotas.isEmpty()) {
+            playingBefore = emptySet()
+            return
+        }
 
-        val inUse = mutableSetOf<String>()
-        val shown = foreground
-        if (shown != null && shown in quotas && screenInUse()) inUse += shown
-        val playing = playingSessions()
-        playing.forEach { (group, _) -> if (group in quotas) inUse += group }
-        inUse.forEach { AppLimits.add(this, it, delta) }
+        val shown = onScreen().filter { it in quotas }.toSet()
+        val playing = playingSessions().filter { it.first in quotas }
+        val playingGroups = playing.map { it.first }.toSet()
+        for (group in shown + playingGroups) {
+            // Playing at both ticks: the whole gap was listening, however
+            // late this tick came (the phone dozes with the screen off).
+            val cap = if (group in playingGroups && group in playingBefore) {
+                MAX_PLAYING_GAP_MILLIS
+            } else {
+                MAX_TICK_GAP_MILLIS
+            }
+            AppLimits.add(this, group, gap.coerceAtMost(cap))
+        }
+        playingBefore = playingGroups
 
-        if (shown != null && screenInUse() && AppLimits.isUsedUp(this, shown)) block(shown)
+        shown.firstOrNull { AppLimits.isUsedUp(this, it) }?.let { block(it) }
         playing.forEach { (group, controller) ->
             if (AppLimits.isUsedUp(this, group)) pause(controller)
         }
+        checkAppInfo()
     }
 
     private fun screenInUse(): Boolean {
@@ -261,49 +294,94 @@ class AlarmGuardService : AccessibilityService() {
         controller.transportControls.pause()
     }
 
-    /** Today's time is used up: home, with its playback paused. */
+    /**
+     * Today's time is used up: home, with its playback paused. If home
+     * doesn't work (the app is pinned, or it's still there moments later),
+     * the screen locks instead.
+     */
     private fun block(group: String) {
         Log.i(TAG, "$group: today's time is used up")
-        performGlobalAction(GLOBAL_ACTION_HOME)
-        playingSessions().forEach { (g, c) -> if (g == group) pause(c) }
         val now = SystemClock.elapsedRealtime()
-        if (now - lastNotice > NOTICE_GAP_MILLIS) {
-            lastNotice = now
-            Toast.makeText(
-                this,
-                "Today’s time for this app is used up. It opens again after midnight.",
-                Toast.LENGTH_LONG,
-            ).show()
+        val activities = getSystemService(ActivityManager::class.java)
+        val pinned = activities != null &&
+            activities.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE
+        val stillThere = lastBlocked == group && now - lastBlockedAt < STUCK_MILLIS
+        if ((pinned || stillThere) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN)
+        } else {
+            performGlobalAction(GLOBAL_ACTION_HOME)
         }
+        lastBlocked = group
+        lastBlockedAt = now
+        playingSessions().forEach { (g, c) -> if (g == group) pause(c) }
+        notice("Today’s time for this app is used up. It opens again after midnight.")
+    }
+
+    private fun notice(text: String) {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastNotice < NOTICE_GAP_MILLIS) return
+        lastNotice = now
+        Toast.makeText(this, text, Toast.LENGTH_LONG).show()
     }
 
     /**
-     * While limits are set, the guard can't be switched off and Redemption
-     * can't be uninstalled: back out of those screens.
+     * While limits are set the guard stays on and Redemption stays
+     * installed: back out of the guard's and the background-listening
+     * switches, Redemption's uninstall dialog, and its App info page (force
+     * stop and clear storage would turn the limits off).
      */
-    private fun protectLimits(pkg: String, event: AccessibilityEvent) {
+    private fun protectLimits(pkg: String, cls: String, event: AccessibilityEvent) {
+        val inSettings = pkg.contains("settings")
+        val inInstaller = pkg.contains("packageinstaller")
+        if (!inSettings && !inInstaller) return
         val texts = event.text.mapNotNull { it?.toString()?.trim() }
-        val joined = texts.joinToString(" ").lowercase()
-        val appName = applicationInfo.loadLabel(packageManager).toString()
-        val guardName = getString(R.string.alarm_guard_label)
-        val uninstallingUs = pkg.contains("packageinstaller") &&
-            joined.contains("uninstall") &&
-            texts.any { it.contains(appName, ignoreCase = true) }
-        val guardSettings = pkg.contains("settings") &&
-            texts.any { it.equals(guardName, ignoreCase = true) }
-        if (uninstallingUs || guardSettings) {
-            Log.i(TAG, "App limits are locked: closing ${event.className}")
-            performGlobalAction(GLOBAL_ACTION_BACK)
-            val now = SystemClock.elapsedRealtime()
-            if (now - lastNotice > NOTICE_GAP_MILLIS) {
-                lastNotice = now
-                Toast.makeText(
-                    this,
-                    "Your app limits are locked — the guard stays on.",
-                    Toast.LENGTH_LONG,
-                ).show()
+        val appName = appName()
+        if (inInstaller) {
+            val uninstalling = cls.contains("Uninstall", ignoreCase = true) ||
+                texts.any { it.contains("uninstall", ignoreCase = true) }
+            if (uninstalling && (texts.any { it.contains(appName, ignoreCase = true) } || activeWindowMentions(appName))) {
+                closeProtected()
             }
+            return
         }
+        val ours = listOf(getString(R.string.alarm_guard_label), getString(R.string.media_watch_label))
+        if (texts.any { t -> ours.any { t.equals(it, ignoreCase = true) } }) {
+            closeProtected()
+            return
+        }
+        // App info fills in a moment after it opens.
+        main.postDelayed({ checkAppInfo() }, 350)
+        main.postDelayed({ checkAppInfo() }, 900)
+    }
+
+    /** Redemption's App info or Storage page (its name in the header, with action buttons). */
+    private fun checkAppInfo() {
+        if (AppLimits.quotas(this).isEmpty()) return
+        val root = try {
+            rootInActiveWindow
+        } catch (e: Exception) {
+            null
+        } ?: return
+        if (root.packageName?.toString()?.contains("settings") != true) return
+        val appName = appName()
+        val header = HEADER_IDS.flatMap { root.findAccessibilityNodeInfosByViewId(it) }
+        if (header.none { it.text?.toString()?.trim().equals(appName, ignoreCase = true) }) return
+        val actions = ACTION_BUTTON_IDS.flatMap { root.findAccessibilityNodeInfosByViewId(it) }
+        if (actions.isNotEmpty()) closeProtected()
+    }
+
+    private fun activeWindowMentions(text: String): Boolean = try {
+        rootInActiveWindow?.findAccessibilityNodeInfosByText(text)?.isNotEmpty() == true
+    } catch (e: Exception) {
+        false
+    }
+
+    private fun appName() = applicationInfo.loadLabel(packageManager).toString()
+
+    private fun closeProtected() {
+        Log.i(TAG, "App limits are locked: closing a protected screen")
+        performGlobalAction(GLOBAL_ACTION_BACK)
+        notice("Your app limits are locked — the guard stays on.")
     }
 
     /** Volume keys do nothing while the alarm rings. */
@@ -342,8 +420,30 @@ class AlarmGuardService : AccessibilityService() {
         /** How often limited apps' time is counted. */
         private const val TICK_MILLIS = 10_000L
 
-        /** A late tick (the phone dozed) counts at most this much. */
+        /** A late tick (the phone dozed) counts at most this much… */
         private const val MAX_TICK_GAP_MILLIS = 30_000L
+
+        /** …unless the same app was playing all along. */
+        private const val MAX_PLAYING_GAP_MILLIS = 15 * 60_000L
+
+        /** Blocked again this soon: home didn't work. */
+        private const val STUCK_MILLIS = 15_000L
+
+        /** The app header on Settings' App info and Storage pages. */
+        private val HEADER_IDS = listOf(
+            "com.android.settings:id/entity_header_title",
+            "com.android.settings:id/app_name",
+        )
+
+        /** Open / Uninstall / Force stop, or Clear storage / Clear cache. */
+        private val ACTION_BUTTON_IDS = listOf(
+            "com.android.settings:id/button1",
+            "com.android.settings:id/button2",
+            "com.android.settings:id/button3",
+            "com.android.settings:id/button4",
+            "com.android.settings:id/right_button",
+            "com.android.settings:id/left_button",
+        )
 
         private const val NOTICE_GAP_MILLIS = 4_000L
 

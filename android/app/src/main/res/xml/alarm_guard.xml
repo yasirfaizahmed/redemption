@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Alarm guard: only acts while a wake-up alarm rings (see AlarmGuardService). -->
+<!-- Alarm guard: acts while a wake-up alarm rings, and keeps the daily app
+     limits (see AlarmGuardService). Window content is read only to tell which
+     apps are on screen and whether a Settings page is Redemption's own. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeWindowStateChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:accessibilityFlags="flagRequestFilterKeyEvents"
+    android:accessibilityFlags="flagRequestFilterKeyEvents|flagRetrieveInteractiveWindows|flagReportViewIds"
     android:canRequestFilterKeyEvents="true"
-    android:canRetrieveWindowContent="false"
+    android:canRetrieveWindowContent="true"
     android:notificationTimeout="0"
     android:description="@string/alarm_guard_description"
     android:summary="@string/alarm_guard_summary" />
