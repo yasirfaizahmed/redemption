@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:material_ui/material_ui.dart';
@@ -220,16 +221,22 @@ class _WakeAlarmSectionState extends ConsumerState<WakeAlarmSection>
         _Check(
           icon: Icons.shield_outlined,
           title: 'Alarm guard',
-          ok: checks?.guard,
-          okText:
-              'On — while ringing: no power menu, no uninstalling, no Settings, '
-              'no volume buttons',
+          ok: checks == null
+              ? null
+              : (checks.guardAuto ?? false) || (checks.guard ?? false),
+          okText: checks?.guardAuto ?? false
+              ? 'Switches itself on only while the alarm rings — Google Pay '
+                    'keeps working the rest of the time'
+              : 'On — while ringing: no power menu, no uninstalling, no '
+                    'Settings, no volume buttons. Google Pay won’t pay while '
+                    'it’s on: see below.',
           fixText:
-              'Turn on “Redemption alarm guard” in Accessibility. While the '
-              'alarm rings it blocks the power menu, uninstalling, Settings '
-              'and the volume buttons.',
+              'Optional. While the alarm rings it blocks the power menu, '
+              'uninstalling, Settings and the volume buttons. Best switched '
+              'on by Redemption itself, only while ringing: see below.',
           onFix: () => service.openSystemSetting('accessibility'),
         ),
+        if (!(checks?.guardAuto ?? false)) const _GuardAutoTip(),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
           child: Text(
@@ -257,6 +264,66 @@ class _WakeAlarmSectionState extends ConsumerState<WakeAlarmSection>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: children,
+    );
+  }
+}
+
+/// How to let Redemption switch the guard on only while ringing: a one-time
+/// adb command (Android lets no app grant itself this).
+class _GuardAutoTip extends StatelessWidget {
+  const _GuardAutoTip();
+
+  static const command =
+      'adb shell pm grant io.github.yasirfaizahmed.redemption '
+      'android.permission.WRITE_SECURE_SETTINGS';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Card(
+        margin: EdgeInsets.zero,
+        color: scheme.surfaceContainerHigh,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 6, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Google Pay and some banking apps refuse payments while any '
+                'downloaded app’s accessibility service is on. Keep the guard '
+                'off in Accessibility, and let Redemption switch it on just '
+                'while the alarm rings: with USB debugging on, connect the '
+                'phone to a computer once and run',
+                style: theme.textTheme.bodySmall,
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Expanded(
+                    child: SelectableText(
+                      command,
+                      style: TextStyle(fontFamily: 'monospace', fontSize: 12),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Copy the command',
+                    icon: const Icon(Icons.copy_rounded),
+                    onPressed: () async {
+                      await Clipboard.setData(
+                        const ClipboardData(text: command),
+                      );
+                      if (context.mounted) showSnack(context, 'Copied');
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

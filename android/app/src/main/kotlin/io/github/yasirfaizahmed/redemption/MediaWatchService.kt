@@ -6,12 +6,32 @@ import android.provider.Settings
 import android.service.notification.NotificationListenerService
 
 /**
- * Turned on as "Notification access", this lets the alarm guard see which
- * app is playing music or video in the background, so listening counts
- * towards the app's daily limit and stops when it is used up. It reads no
+ * "Redemption app limits": turned on as Notification access, Android keeps
+ * it connected, and it runs the daily app limits ([LimitsEngine]) — seeing
+ * which limited app plays in the background as well. It reads no
  * notifications.
  */
 class MediaWatchService : NotificationListenerService() {
+    private var engine: LimitsEngine? = null
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        engine?.stop()
+        engine = LimitsEngine(this, component(this)).also { it.start() }
+    }
+
+    override fun onListenerDisconnected() {
+        engine?.stop()
+        engine = null
+        super.onListenerDisconnected()
+    }
+
+    override fun onDestroy() {
+        engine?.stop()
+        engine = null
+        super.onDestroy()
+    }
+
     companion object {
         fun component(context: Context) = ComponentName(context, MediaWatchService::class.java)
 

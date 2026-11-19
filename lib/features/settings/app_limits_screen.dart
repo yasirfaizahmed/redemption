@@ -107,10 +107,7 @@ class _AppLimitsScreenState extends ConsumerState<AppLimitsScreen>
       message:
           '$lines\n\n'
           'Once locked, a limit can never be raised or removed — only made '
-          'stricter. Each day’s time starts again at midnight. While limits '
-          'are set, the alarm guard and background listening can’t be turned '
-          'off, and Redemption can’t be uninstalled, force-stopped or '
-          'cleared.',
+          'stricter. Each day’s time starts again at midnight.',
       confirmLabel: 'Lock for good',
     );
   }
@@ -175,9 +172,6 @@ class _AppLimitsScreenState extends ConsumerState<AppLimitsScreen>
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: scheme.onSurfaceVariant,
     );
-    final needsListening = _draft.keys.any(
-      LimitedApp.playsInBackground.contains,
-    );
     return ListView(
       padding: const EdgeInsets.only(bottom: 32),
       children: [
@@ -191,24 +185,43 @@ class _AppLimitsScreenState extends ConsumerState<AppLimitsScreen>
           ),
         ),
         _Need(
-          icon: Icons.shield_outlined,
-          title: 'Alarm guard',
-          ok: s.guard,
-          okText: 'On — it counts the time and closes the apps',
+          icon: Icons.notifications_active_outlined,
+          title: 'Notification access',
+          ok: s.mediaAccess,
+          okText: 'Keeps the limits running, music in the background included',
           fixText:
-              'Required. Turn on “Redemption alarm guard” in Accessibility.',
-          onFix: () => service.openSystemSetting('accessibility'),
+              'Allow notification access for “Redemption app limits”. It '
+              'keeps the limits running and pauses YouTube, YouTube Music and '
+              'Spotify playing in the background once time is up. No '
+              'notification is read.',
+          onFix: () => service.openSystemSetting('mediaAccess'),
         ),
         _Need(
-          icon: Icons.headphones_rounded,
-          title: 'Background listening',
-          ok: s.mediaAccess,
-          okText: 'Music and videos playing in the background count too',
+          icon: Icons.query_stats_rounded,
+          title: 'Usage access',
+          ok: s.usageAccess,
+          okText: 'Sees which app is open, to count its time',
           fixText:
-              'Allow notification access for “Redemption app limits”, so '
-              'YouTube, YouTube Music and Spotify playing in the background '
-              'count and are paused when time is up. Needed to limit them.',
-          onFix: () => service.openSystemSetting('mediaAccess'),
+              'Allow usage access for Redemption, to see which app is open.',
+          onFix: () => service.openSystemSetting('usageAccess'),
+        ),
+        _Need(
+          icon: Icons.layers_outlined,
+          title: 'Display over other apps',
+          ok: s.overlay,
+          okText: 'Covers an app whose time is used up',
+          fixText:
+              'Allow Redemption to display over other apps, to cover an app '
+              'whose time is used up.',
+          onFix: () => service.openSystemSetting('overlay'),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: Text(
+            'No accessibility service is used, so Google Pay and banking apps '
+            'keep working.',
+            style: muted,
+          ),
         ),
         if (s.autoTime == false)
           _Need(
@@ -248,25 +261,16 @@ class _AppLimitsScreenState extends ConsumerState<AppLimitsScreen>
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             child: FilledButton.icon(
-              onPressed:
-                  s.guard && (s.mediaAccess || !needsListening) && !_saving
-                  ? () => _lockDraft(s)
-                  : null,
+              onPressed: s.ready && !_saving ? () => _lockDraft(s) : null,
               icon: const Icon(Icons.lock_rounded),
               label: const Text('Lock limits'),
             ),
           ),
-          if (!s.guard)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Text('Turn on the alarm guard first.', style: muted),
-            )
-          else if (needsListening && !s.mediaAccess)
+          if (!s.ready)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: Text(
-                'Turn on background listening first — YouTube, YouTube Music '
-                'and Spotify keep playing in the background otherwise.',
+                'Allow the three permissions above first.',
                 style: muted,
               ),
             ),
@@ -274,10 +278,11 @@ class _AppLimitsScreenState extends ConsumerState<AppLimitsScreen>
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
           child: Text(
-            'Time counts while an app is on screen (and, with background '
-            'listening, while it plays). Chrome pages opened inside other '
-            'apps (sign-ins, payment checks) aren’t counted or blocked. Other '
-            'browsers and apps aren’t limited.',
+            'Time counts while an app is on screen or playing in the '
+            'background. Chrome pages opened inside other apps (sign-ins, '
+            'payment checks) aren’t counted or blocked. Other browsers and '
+            'apps aren’t limited. Switching the permissions above off would '
+            'stop the limits — keeping them on is your promise to yourself.',
             style: muted,
           ),
         ),

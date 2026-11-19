@@ -19,6 +19,26 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         showOverLockScreenIfRinging()
+        // A guard switched on for an alarm that's no longer ringing (the app
+        // was closed mid-alarm): off again, so payments work.
+        if (AlarmService.ringingAlarmIds.isEmpty()) guardOffIfWeTurnedItOn()
+    }
+
+    private val guardPrefs get() = getSharedPreferences("redemption_alarm_guard", MODE_PRIVATE)
+
+    /** The guard on only while ringing, if Redemption may switch it. */
+    private fun guardOnForRinging() {
+        if (!AlarmGuardService.canSwitch(this) || AlarmGuardService.isEnabled(this)) return
+        if (AlarmGuardService.setEnabled(this, true)) {
+            guardPrefs.edit().putBoolean("autoOn", true).apply()
+        }
+    }
+
+    private fun guardOffIfWeTurnedItOn() {
+        if (!guardPrefs.getBoolean("autoOn", false)) return
+        if (AlarmGuardService.setEnabled(this, false)) {
+            guardPrefs.edit().putBoolean("autoOn", false).apply()
+        }
     }
 
     override fun onResume() {
@@ -62,11 +82,13 @@ class MainActivity : FlutterActivity() {
                     // The sums are on screen: the alarm guard may act.
                     "sumsShown" -> {
                         AlarmGuardService.sumsShownAt = System.currentTimeMillis()
+                        guardOnForRinging()
                         result.success(null)
                     }
                     // Solved: the journal goes back behind the lock screen.
                     "ringingEnded" -> {
                         AlarmGuardService.sumsShownAt = 0L
+                        guardOffIfWeTurnedItOn()
                         showOverLockScreenIfRinging()
                         result.success(null)
                     }
@@ -111,6 +133,7 @@ class MainActivity : FlutterActivity() {
             "notifications" to notifications?.areNotificationsEnabled(),
             "fullScreen" to fullScreen,
             "guard" to AlarmGuardService.isEnabled(this),
+            "guardAuto" to AlarmGuardService.canSwitch(this),
             "battery" to power?.isIgnoringBatteryOptimizations(packageName),
         )
     }
@@ -125,8 +148,9 @@ class MainActivity : FlutterActivity() {
             "day" to AppLimits.currentDay(this),
             "quotas" to AppLimits.quotas(this),
             "used" to AppLimits.used(this),
-            "guard" to AlarmGuardService.isEnabled(this),
             "mediaAccess" to MediaWatchService.isEnabled(this),
+            "usageAccess" to LimitsEngine.hasUsageAccess(this),
+            "overlay" to Settings.canDrawOverlays(this),
             "autoTime" to autoTime,
         )
     }
@@ -161,6 +185,14 @@ class MainActivity : FlutterActivity() {
                 Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS),
             )
             "dateTime" -> listOf(Intent(Settings.ACTION_DATE_SETTINGS))
+            "usageAccess" -> listOf(
+                Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS, pkg),
+                Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS),
+            )
+            "overlay" -> listOf(
+                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, pkg),
+                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION),
+            )
             "battery" -> listOf(
                 Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, pkg),
                 Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),

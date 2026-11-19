@@ -10,8 +10,7 @@ import '../support/harness.dart';
 class FakeAppLimits implements AppLimitsService {
   var quotas = <String, int>{};
   var used = <String, Duration>{};
-  var guard = true;
-  var mediaAccess = true;
+  var ready = true;
   final saved = <Map<String, int>>[];
 
   @override
@@ -21,8 +20,9 @@ class FakeAppLimits implements AppLimitsService {
   Future<AppLimitsState> load() async => AppLimitsState(
     quotas: Map.of(quotas),
     used: Map.of(used),
-    guard: guard,
-    mediaAccess: mediaAccess,
+    mediaAccess: ready,
+    usageAccess: ready,
+    overlay: ready,
     autoTime: true,
   );
 
@@ -121,78 +121,43 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('a used-up app says so, and nothing locks without the guard', (
-    tester,
-  ) async {
-    usePhoneSurface(tester, textScale: 1.3);
-    final env = await createEnv(tester, template: Templates.redemption);
-    addTearDown(() => disposeEnv(tester, env));
-    final limits = FakeAppLimits()
-      ..quotas = {'spotify': 30}
-      ..used = {'spotify': const Duration(minutes: 31)}
-      ..guard = false;
+  testWidgets(
+    'a used-up app says so, and nothing locks without its permissions',
+    (tester) async {
+      usePhoneSurface(tester, textScale: 1.3);
+      final env = await createEnv(tester, template: Templates.redemption);
+      addTearDown(() => disposeEnv(tester, env));
+      final limits = FakeAppLimits()
+        ..quotas = {'spotify': 30}
+        ..used = {'spotify': const Duration(minutes: 31)}
+        ..ready = false;
 
-    await tester.pumpWidget(
-      buildApp(
-        env,
-        overrides: [appLimitsServiceProvider.overrideWithValue(limits)],
-      ),
-    );
-    await settle(tester);
-    await openLimits(tester);
+      await tester.pumpWidget(
+        buildApp(
+          env,
+          overrides: [appLimitsServiceProvider.overrideWithValue(limits)],
+        ),
+      );
+      await settle(tester);
+      await openLimits(tester);
 
-    await reveal(tester, find.text('Used up — opens again after midnight'));
-    await tester.drag(find.byType(Scrollable).last, const Offset(0, 2000));
-    await settle(tester);
-    await tapIn(tester, find.text('Chrome'));
-    await reveal(tester, find.text('Lock limits'));
-    final button = tester.widget<ButtonStyleButton>(
-      find.ancestor(
-        of: find.text('Lock limits'),
-        matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
-      ),
-    );
-    expect(button.onPressed, isNull);
-    expect(find.text('Turn on the alarm guard first.'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('apps that play in the background need background listening', (
-    tester,
-  ) async {
-    usePhoneSurface(tester);
-    final env = await createEnv(tester, template: Templates.redemption);
-    addTearDown(() => disposeEnv(tester, env));
-    final limits = FakeAppLimits()..mediaAccess = false;
-    await tester.pumpWidget(
-      buildApp(
-        env,
-        overrides: [appLimitsServiceProvider.overrideWithValue(limits)],
-      ),
-    );
-    await settle(tester);
-    await openLimits(tester);
-
-    ButtonStyleButton lockButton() => tester.widget<ButtonStyleButton>(
-      find.ancestor(
-        of: find.text('Lock limits'),
-        matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
-      ),
-    );
-
-    await tapIn(tester, find.text('Chrome'));
-    await reveal(tester, find.text('Lock limits'));
-    expect(lockButton().onPressed, isNotNull, reason: 'Chrome alone is fine');
-
-    await tester.drag(find.byType(Scrollable).last, const Offset(0, 2000));
-    await settle(tester);
-    await tapIn(tester, find.text('Spotify'));
-    await reveal(tester, find.text('Lock limits'));
-    expect(lockButton().onPressed, isNull);
-    expect(
-      find.textContaining('Turn on background listening first'),
-      findsOneWidget,
-    );
-    expect(tester.takeException(), isNull);
-  });
+      await reveal(tester, find.text('Used up — opens again after midnight'));
+      await tester.drag(find.byType(Scrollable).last, const Offset(0, 2000));
+      await settle(tester);
+      await tapIn(tester, find.text('Chrome'));
+      await reveal(tester, find.text('Lock limits'));
+      final button = tester.widget<ButtonStyleButton>(
+        find.ancestor(
+          of: find.text('Lock limits'),
+          matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
+        ),
+      );
+      expect(button.onPressed, isNull);
+      expect(
+        find.text('Allow the three permissions above first.'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

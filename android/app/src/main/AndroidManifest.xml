@@ -17,6 +17,17 @@
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <!-- Wake-up alarm: ask to be left out of battery saving so it rings on time. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Daily app limits: which app is open (Usage access) and a cover over
+         one whose time is used up (Display over other apps). -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Optional, granted only over adb: lets Redemption switch its alarm guard
+         on just while an alarm rings, so payment apps aren't upset by it. -->
+    <uses-permission
+        android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
 
     <application
         android:label="Redemption"
@@ -72,9 +83,9 @@
                 android:resource="@xml/alarm_guard" />
         </service>
 
-        <!-- App limits: as "Notification access", lets the guard see which
-             limited app is playing in the background, count it and pause it
-             once its time is used up. Reads no notifications. -->
+        <!-- App limits: as "Notification access", Android keeps this running;
+             it keeps the daily limits (LimitsEngine), background playback
+             included. Reads no notifications. -->
         <service
             android:name=".MediaWatchService"
             android:exported="false"

@@ -17,10 +17,6 @@ class LimitedApp {
   /// What else shares this app's time.
   final String covers;
 
-  /// Apps that play in the background (Spotify, YouTube Music, and YouTube
-  /// with Vanced): their limit needs background listening counted.
-  static const playsInBackground = {'youtube', 'ytmusic', 'spotify'};
-
   static const all = [
     LimitedApp('chrome', 'Chrome', 'Chrome, Beta, Dev and Canary'),
     LimitedApp('instagram', 'Instagram', 'Instagram and Instagram Lite'),
@@ -41,8 +37,9 @@ class AppLimitsState {
   const AppLimitsState({
     this.quotas = const {},
     this.used = const {},
-    this.guard = false,
     this.mediaAccess = false,
+    this.usageAccess = false,
+    this.overlay = false,
     this.autoTime,
   });
 
@@ -52,11 +49,18 @@ class AppLimitsState {
   /// Time used today, per app id.
   final Map<String, Duration> used;
 
-  /// The accessibility guard that counts and blocks is on.
-  final bool guard;
-
-  /// Background playback can be counted and paused.
+  /// Notification access: keeps the limits running, background playback
+  /// included.
   final bool mediaAccess;
+
+  /// Usage access: which app is open.
+  final bool usageAccess;
+
+  /// Display over other apps: a used-up app gets covered.
+  final bool overlay;
+
+  /// Everything the limits need (none of it upsets payment apps).
+  bool get ready => mediaAccess && usageAccess && overlay;
 
   /// The phone sets its own date and time (null: unknown).
   final bool? autoTime;
@@ -107,8 +111,9 @@ class ChannelAppLimitsService implements AppLimitsService {
           for (final e in used.entries)
             '${e.key}': Duration(milliseconds: (e.value as num).toInt()),
         },
-        guard: m['guard'] == true,
         mediaAccess: m['mediaAccess'] == true,
+        usageAccess: m['usageAccess'] == true,
+        overlay: m['overlay'] == true,
         autoTime: m['autoTime'] as bool?,
       );
     } catch (e) {

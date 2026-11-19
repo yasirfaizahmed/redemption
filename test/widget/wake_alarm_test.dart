@@ -358,6 +358,14 @@ void main() {
       ),
       findsOneWidget,
     );
+    // How to keep Google Pay working: the guard only while ringing.
+    await tester.dragUntilVisible(
+      find.byTooltip('Copy the command'),
+      find.byType(Scrollable).first,
+      const Offset(0, -200),
+    );
+    expect(find.textContaining('Google Pay'), findsWidgets);
+    expect(find.textContaining('WRITE_SECURE_SETTINGS'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

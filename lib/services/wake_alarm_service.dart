@@ -42,6 +42,7 @@ class AlarmChecks {
     this.notifications,
     this.fullScreen,
     this.guard,
+    this.guardAuto,
     this.batteryUnrestricted,
   });
 
@@ -54,6 +55,11 @@ class AlarmChecks {
   /// The "Alarm guard" accessibility service is on: while an alarm rings it
   /// closes the power menu, the uninstall dialog and Settings.
   final bool? guard;
+
+  /// Redemption may switch the guard on itself, just while an alarm rings
+  /// (granted once over adb) — so payment apps that refuse to work beside a
+  /// downloaded accessibility service (Google Pay) aren't affected.
+  final bool? guardAuto;
 
   /// Android won't put the app to sleep to save battery.
   final bool? batteryUnrestricted;
@@ -296,6 +302,7 @@ class PluginWakeAlarmService implements WakeAlarmService {
         notifications: m['notifications'],
         fullScreen: m['fullScreen'],
         guard: m['guard'],
+        guardAuto: m['guardAuto'],
         batteryUnrestricted: m['battery'],
       );
     } catch (e, s) {

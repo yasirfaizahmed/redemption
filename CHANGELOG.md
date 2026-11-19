@@ -3,6 +3,22 @@
 Every release's notes come from its section below: CI copies the section into
 the GitHub release, and the app shows it under “What’s new” before updating.
 
+## 1.10.0
+
+- **Google Pay works again.** Google Pay and some banking apps refuse
+  payments while a downloaded app's accessibility service is on. Daily app
+  limits no longer use one: they now run on *Usage access*, *Display over
+  other apps* and *Notification access*, which payment apps don't object to.
+  Your locked limits are kept — allow the three permissions in *Settings →
+  Daily app limits* and they carry on.
+- **The alarm guard is for the alarm only again**, and you can switch it off
+  in Accessibility. Better still, let Redemption switch it on just while the
+  alarm rings and off once the sums are solved: *Settings → Wake-up alarm*
+  shows a one-time `adb` command that allows this. Then the guard is off
+  whenever you pay.
+- A used-up app is now covered by a full-screen notice and the phone goes
+  home; music it plays in the background is paused as before.
+
 ## 1.9.0
 
 - **Gentler wake-up sums, your choice.** *Settings → Wake-up alarm* now has a
