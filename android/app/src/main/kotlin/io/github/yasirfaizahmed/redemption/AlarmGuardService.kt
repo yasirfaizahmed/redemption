@@ -62,6 +62,15 @@ class AlarmGuardService : AccessibilityService() {
 
     private var guardingSince = 0L
 
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        // Switched on for an alarm that's gone (the app died mid-alarm):
+        // off again at once, so payments work.
+        if (AlarmService.ringingAlarmIds.isEmpty() && !ringsVerySoon()) {
+            switchOffIfAutoOn(this)
+        }
+    }
+
     private fun ringsVerySoon(): Boolean {
         val alarms = getSystemService(AlarmManager::class.java) ?: return false
         val next = alarms.nextAlarmClock ?: return false
@@ -189,6 +198,24 @@ class AlarmGuardService : AccessibilityService() {
          */
         @Volatile
         var sumsShownAt = 0L
+
+        private fun prefs(context: Context) =
+            context.getSharedPreferences("redemption_alarm_guard", Context.MODE_PRIVATE)
+
+        /** Redemption switched the guard on for a ringing alarm. */
+        fun autoOn(context: Context) = prefs(context).getBoolean("autoOn", false)
+
+        /** On for a ringing alarm, if Redemption may switch it and it's off. */
+        fun switchOnForRinging(context: Context) {
+            if (!canSwitch(context) || isEnabled(context)) return
+            if (setEnabled(context, true)) prefs(context).edit().putBoolean("autoOn", true).apply()
+        }
+
+        /** Off again, if it was Redemption that switched it on. */
+        fun switchOffIfAutoOn(context: Context) {
+            if (!autoOn(context)) return
+            if (setEnabled(context, false)) prefs(context).edit().putBoolean("autoOn", false).apply()
+        }
 
         /** Redemption may switch the guard on and off itself (granted over adb). */
         fun canSwitch(context: Context): Boolean =

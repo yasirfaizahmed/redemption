@@ -223,17 +223,23 @@ class _WakeAlarmSectionState extends ConsumerState<WakeAlarmSection>
           title: 'Alarm guard',
           ok: checks == null
               ? null
-              : (checks.guardAuto ?? false) || (checks.guard ?? false),
+              : (checks.guardAuto ?? false)
+              ? !(checks.guardAlwaysOn ?? false)
+              : (checks.guard ?? false),
           okText: checks?.guardAuto ?? false
               ? 'Switches itself on only while the alarm rings — Google Pay '
                     'keeps working the rest of the time'
               : 'On — while ringing: no power menu, no uninstalling, no '
                     'Settings, no volume buttons. Google Pay won’t pay while '
                     'it’s on: see below.',
-          fixText:
-              'Optional. While the alarm rings it blocks the power menu, '
-              'uninstalling, Settings and the volume buttons. Best switched '
-              'on by Redemption itself, only while ringing: see below.',
+          fixText: (checks?.guardAuto ?? false)
+              ? 'On all the time, so Google Pay won’t pay. Switch it off in '
+                    'Accessibility — Redemption switches it on by itself while '
+                    'the alarm rings.'
+              : 'Optional. While the alarm rings it blocks the power menu, '
+                    'uninstalling, Settings and the volume buttons. Best '
+                    'switched on by Redemption itself, only while ringing: '
+                    'see below.',
           onFix: () => service.openSystemSetting('accessibility'),
         ),
         if (!(checks?.guardAuto ?? false)) const _GuardAutoTip(),

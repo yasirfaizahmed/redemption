@@ -43,6 +43,7 @@ class AlarmChecks {
     this.fullScreen,
     this.guard,
     this.guardAuto,
+    this.guardAlwaysOn,
     this.batteryUnrestricted,
   });
 
@@ -60,6 +61,10 @@ class AlarmChecks {
   /// (granted once over adb) — so payment apps that refuse to work beside a
   /// downloaded accessibility service (Google Pay) aren't affected.
   final bool? guardAuto;
+
+  /// The guard is on with no alarm ringing (switched on by hand): payment
+  /// apps such as Google Pay refuse to work meanwhile.
+  final bool? guardAlwaysOn;
 
   /// Android won't put the app to sleep to save battery.
   final bool? batteryUnrestricted;
@@ -303,6 +308,7 @@ class PluginWakeAlarmService implements WakeAlarmService {
         fullScreen: m['fullScreen'],
         guard: m['guard'],
         guardAuto: m['guardAuto'],
+        guardAlwaysOn: m['guardAlwaysOn'],
         batteryUnrestricted: m['battery'],
       );
     } catch (e, s) {

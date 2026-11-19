@@ -21,24 +21,7 @@ class MainActivity : FlutterActivity() {
         showOverLockScreenIfRinging()
         // A guard switched on for an alarm that's no longer ringing (the app
         // was closed mid-alarm): off again, so payments work.
-        if (AlarmService.ringingAlarmIds.isEmpty()) guardOffIfWeTurnedItOn()
-    }
-
-    private val guardPrefs get() = getSharedPreferences("redemption_alarm_guard", MODE_PRIVATE)
-
-    /** The guard on only while ringing, if Redemption may switch it. */
-    private fun guardOnForRinging() {
-        if (!AlarmGuardService.canSwitch(this) || AlarmGuardService.isEnabled(this)) return
-        if (AlarmGuardService.setEnabled(this, true)) {
-            guardPrefs.edit().putBoolean("autoOn", true).apply()
-        }
-    }
-
-    private fun guardOffIfWeTurnedItOn() {
-        if (!guardPrefs.getBoolean("autoOn", false)) return
-        if (AlarmGuardService.setEnabled(this, false)) {
-            guardPrefs.edit().putBoolean("autoOn", false).apply()
-        }
+        if (AlarmService.ringingAlarmIds.isEmpty()) AlarmGuardService.switchOffIfAutoOn(this)
     }
 
     override fun onResume() {
@@ -82,13 +65,13 @@ class MainActivity : FlutterActivity() {
                     // The sums are on screen: the alarm guard may act.
                     "sumsShown" -> {
                         AlarmGuardService.sumsShownAt = System.currentTimeMillis()
-                        guardOnForRinging()
+                        AlarmGuardService.switchOnForRinging(this)
                         result.success(null)
                     }
                     // Solved: the journal goes back behind the lock screen.
                     "ringingEnded" -> {
                         AlarmGuardService.sumsShownAt = 0L
-                        guardOffIfWeTurnedItOn()
+                        AlarmGuardService.switchOffIfAutoOn(this)
                         showOverLockScreenIfRinging()
                         result.success(null)
                     }
@@ -134,6 +117,12 @@ class MainActivity : FlutterActivity() {
             "fullScreen" to fullScreen,
             "guard" to AlarmGuardService.isEnabled(this),
             "guardAuto" to AlarmGuardService.canSwitch(this),
+            // On by hand, with no alarm ringing: payment apps refuse to work.
+            "guardAlwaysOn" to (
+                AlarmGuardService.isEnabled(this) &&
+                    !AlarmGuardService.autoOn(this) &&
+                    AlarmService.ringingAlarmIds.isEmpty()
+                ),
             "battery" to power?.isIgnoringBatteryOptimizations(packageName),
         )
     }

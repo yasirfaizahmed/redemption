@@ -45,8 +45,14 @@ class LimitsEngine(private val context: Context, private val listener: Component
     private val main = Handler(Looper.getMainLooper())
     private var lastTick = SystemClock.elapsedRealtime()
 
+    /** The screen was just unlocked: a round now, not at the next idle one. */
+    fun nudge() = start()
+
     /** Events are read again from a little before the last read: late ones still land. */
-    private var eventsFrom = System.currentTimeMillis() - 60 * 60_000L
+    private var eventsFrom = 0L
+
+    /** The first read after starting looks a day back, to find the app in front. */
+    private var firstRead = true
     private var foregroundPkg: String? = null
     private var foregroundIsCustomTab = false
     private var playingBefore = emptySet<String>()
@@ -64,9 +70,9 @@ class LimitsEngine(private val context: Context, private val listener: Component
         }
     }
 
+    /** Starts, or runs a round now (the screen was just unlocked). */
     fun start() {
         main.removeCallbacks(tick)
-        lastTick = SystemClock.elapsedRealtime()
         main.post(tick)
     }
 
@@ -93,7 +99,10 @@ class LimitsEngine(private val context: Context, private val listener: Component
             ?.takeIf { inUse && !foregroundIsCustomTab }
             ?.let { AppLimits.groupOf(it)?.id }
             ?.takeIf { it in quotas }
-        val playing = playingSessions().filter { it.first in quotas }
+        // A video in a Chrome Custom Tab belongs to the other app: not counted.
+        val playing = playingSessions().filter { (group, _) ->
+            group in quotas && !(group == "chrome" && foregroundIsCustomTab)
+        }
         val playingGroups = playing.map { it.first }.toSet()
         for (group in setOfNotNull(shownGroup) + playingGroups) {
             // Playing at both rounds: the whole gap was listening, however
@@ -107,15 +116,16 @@ class LimitsEngine(private val context: Context, private val listener: Component
         }
         playingBefore = playingGroups
 
-        if (shownGroup != null && AppLimits.isUsedUp(context, shownGroup)) {
-            block(shownGroup, playing)
-        } else {
-            hideOverlay()
-        }
+        val blocked = shownGroup != null && AppLimits.isUsedUp(context, shownGroup)
+        if (blocked) block(shownGroup!!, playing) else hideOverlay()
         playing.forEach { (group, controller) ->
             if (AppLimits.isUsedUp(context, group)) pause(controller)
         }
-        return if (inUse) TICK_ACTIVE_MILLIS else TICK_IDLE_MILLIS
+        return when {
+            blocked -> TICK_BLOCKED_MILLIS // lift the cover as soon as home is up
+            inUse -> TICK_ACTIVE_MILLIS
+            else -> TICK_IDLE_MILLIS
+        }
     }
 
     /** The app in front, from Usage access (resumed / paused activities). */
@@ -127,7 +137,15 @@ class LimitsEngine(private val context: Context, private val listener: Component
         }
         val usage = context.getSystemService(UsageStatsManager::class.java) ?: return
         val now = System.currentTimeMillis()
-        val events = usage.queryEvents(eventsFrom, now) ?: return
+        // Never more than a day (first read) or an hour back: a long pause in
+        // reading must not mean a huge read.
+        val from = if (firstRead) {
+            now - 24 * 60 * 60_000L
+        } else {
+            maxOf(eventsFrom, now - 60 * 60_000L)
+        }
+        firstRead = false
+        val events = usage.queryEvents(from, now) ?: return
         val e = UsageEvents.Event()
         while (events.hasNextEvent()) {
             events.getNextEvent(e)
@@ -271,6 +289,7 @@ class LimitsEngine(private val context: Context, private val listener: Component
         /** Rounds while the screen is in use, and while it's off. */
         private const val TICK_ACTIVE_MILLIS = 2_000L
         private const val TICK_IDLE_MILLIS = 15_000L
+        private const val TICK_BLOCKED_MILLIS = 500L
 
         /** A late round counts at most this much… */
         private const val MAX_GAP_MILLIS = 30_000L
