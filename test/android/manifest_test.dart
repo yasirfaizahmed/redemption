@@ -8,9 +8,8 @@ void main() {
     // or file manager when it declares an accessibility service or a
     // notification listener (or reads SMS); Google Pay also refuses to pay
     // beside a downloaded accessibility service.
-    final manifest = File(
-      'android/app/src/main/AndroidManifest.xml',
-    ).readAsStringSync();
+    final manifest = File('android/app/src/main/AndroidManifest.xml')
+        .readAsStringSync();
     for (final blocked in [
       'BIND_ACCESSIBILITY_SERVICE',
       'BIND_NOTIFICATION_LISTENER_SERVICE',
