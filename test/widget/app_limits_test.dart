@@ -20,7 +20,6 @@ class FakeAppLimits implements AppLimitsService {
   Future<AppLimitsState> load() async => AppLimitsState(
     quotas: Map.of(quotas),
     used: Map.of(used),
-    mediaAccess: ready,
     usageAccess: ready,
     overlay: ready,
     autoTime: true,
@@ -154,7 +153,7 @@ void main() {
       );
       expect(button.onPressed, isNull);
       expect(
-        find.text('Allow the three permissions above first.'),
+        find.text('Allow the two permissions above first.'),
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);

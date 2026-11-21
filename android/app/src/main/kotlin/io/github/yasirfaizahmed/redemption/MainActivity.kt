@@ -19,14 +19,25 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         showOverLockScreenIfRinging()
-        // A guard switched on for an alarm that's no longer ringing (the app
-        // was closed mid-alarm): off again, so payments work.
-        if (AlarmService.ringingAlarmIds.isEmpty()) AlarmGuardService.switchOffIfAutoOn(this)
+        // Limits set (or an alarm ringing): the keeper runs.
+        KeeperService.start(this)
     }
 
     override fun onResume() {
         super.onResume()
+        resumed = true
         showOverLockScreenIfRinging()
+    }
+
+    override fun onPause() {
+        resumed = false
+        super.onPause()
+    }
+
+    companion object {
+        /** On screen now (the keeper doesn't bring back what's already here). */
+        @Volatile
+        var resumed = false
     }
 
     /** The alarm brings back an app already open behind the lock screen. */
@@ -62,16 +73,15 @@ class MainActivity : FlutterActivity() {
                     }
                     // What the phone lets Redemption's own alarm do.
                     "checks" -> result.success(checks())
-                    // The sums are on screen: the alarm guard may act.
+                    // The sums are on screen: the keeper may bring them back.
                     "sumsShown" -> {
-                        AlarmGuardService.sumsShownAt = System.currentTimeMillis()
-                        AlarmGuardService.switchOnForRinging(this)
+                        KeeperService.sumsShownAt = System.currentTimeMillis()
+                        KeeperService.start(this)
                         result.success(null)
                     }
                     // Solved: the journal goes back behind the lock screen.
                     "ringingEnded" -> {
-                        AlarmGuardService.sumsShownAt = 0L
-                        AlarmGuardService.switchOffIfAutoOn(this)
+                        KeeperService.sumsShownAt = 0L
                         showOverLockScreenIfRinging()
                         result.success(null)
                     }
@@ -80,7 +90,9 @@ class MainActivity : FlutterActivity() {
                     "limits" -> result.success(limits())
                     "setLimits" -> {
                         val raw = call.argument<Map<String, Int>>("quotas") ?: emptyMap()
-                        result.success(AppLimits.setQuotas(this, raw))
+                        val error = AppLimits.setQuotas(this, raw)
+                        if (error == null) KeeperService.start(this)
+                        result.success(error)
                     }
                     else -> result.notImplemented()
                 }
@@ -115,14 +127,9 @@ class MainActivity : FlutterActivity() {
         return mapOf(
             "notifications" to notifications?.areNotificationsEnabled(),
             "fullScreen" to fullScreen,
-            "guard" to AlarmGuardService.isEnabled(this),
-            "guardAuto" to AlarmGuardService.canSwitch(this),
-            // On by hand, with no alarm ringing: payment apps refuse to work.
-            "guardAlwaysOn" to (
-                AlarmGuardService.isEnabled(this) &&
-                    !AlarmGuardService.autoOn(this) &&
-                    AlarmService.ringingAlarmIds.isEmpty()
-                ),
+            // Leaving the ringing alarm brings the sums back (KeeperService).
+            "usageAccess" to LimitsEngine.hasUsageAccess(this),
+            "overlay" to Settings.canDrawOverlays(this),
             "battery" to power?.isIgnoringBatteryOptimizations(packageName),
         )
     }
@@ -137,7 +144,6 @@ class MainActivity : FlutterActivity() {
             "day" to AppLimits.currentDay(this),
             "quotas" to AppLimits.quotas(this),
             "used" to AppLimits.used(this),
-            "mediaAccess" to MediaWatchService.isEnabled(this),
             "usageAccess" to LimitsEngine.hasUsageAccess(this),
             "overlay" to Settings.canDrawOverlays(this),
             "autoTime" to autoTime,
@@ -161,17 +167,6 @@ class MainActivity : FlutterActivity() {
                     null
                 },
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkg),
-            )
-            "mediaAccess" -> listOfNotNull(
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS).putExtra(
-                        Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
-                        MediaWatchService.component(this).flattenToString(),
-                    )
-                } else {
-                    null
-                },
-                Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS),
             )
             "dateTime" -> listOf(Intent(Settings.ACTION_DATE_SETTINGS))
             "usageAccess" -> listOf(

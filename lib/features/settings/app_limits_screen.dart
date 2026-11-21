@@ -185,24 +185,15 @@ class _AppLimitsScreenState extends ConsumerState<AppLimitsScreen>
           ),
         ),
         _Need(
-          icon: Icons.notifications_active_outlined,
-          title: 'Notification access',
-          ok: s.mediaAccess,
-          okText: 'Keeps the limits running, music in the background included',
-          fixText:
-              'Allow notification access for “Redemption app limits”. It '
-              'keeps the limits running and pauses YouTube, YouTube Music and '
-              'Spotify playing in the background once time is up. No '
-              'notification is read.',
-          onFix: () => service.openSystemSetting('mediaAccess'),
-        ),
-        _Need(
           icon: Icons.query_stats_rounded,
           title: 'Usage access',
           ok: s.usageAccess,
-          okText: 'Sees which app is open, to count its time',
+          okText:
+              'Sees which app is open, and when YouTube, YouTube Music or '
+              'Spotify keeps playing in the background, to count its time',
           fixText:
-              'Allow usage access for Redemption, to see which app is open.',
+              'Allow usage access for Redemption, to see which app is open and '
+              'what plays in the background.',
           onFix: () => service.openSystemSetting('usageAccess'),
         ),
         _Need(
@@ -218,8 +209,9 @@ class _AppLimitsScreenState extends ConsumerState<AppLimitsScreen>
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
           child: Text(
-            'No accessibility service is used, so Google Pay and banking apps '
-            'keep working.',
+            'No accessibility service and no notification access are used, so '
+            'Google Pay, banking apps and Play Protect are happy. A small '
+            '“Keeping your limits” notification stays while limits are set.',
             style: muted,
           ),
         ),
@@ -270,7 +262,7 @@ class _AppLimitsScreenState extends ConsumerState<AppLimitsScreen>
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: Text(
-                'Allow the three permissions above first.',
+                'Allow the two permissions above first.',
                 style: muted,
               ),
             ),

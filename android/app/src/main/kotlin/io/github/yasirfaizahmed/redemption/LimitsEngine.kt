@@ -4,17 +4,12 @@ import android.app.AppOpsManager
 import android.app.KeyguardManager
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
-import android.media.session.MediaController
-import android.media.session.MediaSessionManager
-import android.media.session.PlaybackState
+import android.media.AudioManager
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.os.PowerManager
 import android.os.Process
 import android.os.SystemClock
@@ -22,6 +17,7 @@ import android.provider.Settings
 import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
@@ -29,60 +25,41 @@ import android.widget.LinearLayout
 import android.widget.TextView
 
 /**
- * Keeps the daily app limits ([AppLimits]) without an accessibility service,
- * so payment apps such as Google Pay keep working. Runs inside
- * [MediaWatchService], which Android keeps connected while Redemption has
- * notification access.
+ * Keeps the daily app limits ([AppLimits]) with no accessibility service and
+ * no notification access — the two things Google Pay and Play Protect object
+ * to. Runs in [KeeperService].
  *
  * - Usage access tells which app is open; its time counts while the screen is
  *   on and unlocked.
- * - Background playback (media sessions) counts too, and is paused once the
- *   app's time is used up.
+ * - Background playback counts too: Usage access also reports when an app
+ *   runs a foreground service (what music apps do while playing). Once its
+ *   time is used up, it is paused with the media pause key.
  * - A used-up app is covered by a full-screen notice (display over other
  *   apps) and the phone goes to the home screen.
  */
-class LimitsEngine(private val context: Context, private val listener: ComponentName) {
-    private val main = Handler(Looper.getMainLooper())
+class LimitsEngine(private val context: Context) {
     private var lastTick = SystemClock.elapsedRealtime()
-
-    /** The screen was just unlocked: a round now, not at the next idle one. */
-    fun nudge() = start()
 
     /** Events are read again from a little before the last read: late ones still land. */
     private var eventsFrom = 0L
 
     /** The first read after starting looks a day back, to find the app in front. */
     private var firstRead = true
-    private var foregroundPkg: String? = null
+
+    /** The app in front (needs Usage access), as of the last read. */
+    var foregroundPkg: String? = null
+        private set
     private var foregroundIsCustomTab = false
+
+    /** Apps running a foreground service, and since when (playing music…). */
+    private val servicesRunning = LinkedHashMap<String, Long>()
     private var playingBefore = emptySet<String>()
     private var overlay: View? = null
 
-    private val tick = object : Runnable {
-        override fun run() {
-            var next = TICK_IDLE_MILLIS
-            try {
-                next = step()
-            } catch (e: Exception) {
-                Log.w(TAG, "App limits", e)
-            }
-            main.postDelayed(this, next)
-        }
-    }
-
-    /** Starts, or runs a round now (the screen was just unlocked). */
-    fun start() {
-        main.removeCallbacks(tick)
-        main.post(tick)
-    }
-
-    fun stop() {
-        main.removeCallbacksAndMessages(null)
-        hideOverlay()
-    }
+    fun stop() = hideOverlay()
 
     /** One round: who's on screen, count, enforce. Returns the delay to the next. */
-    private fun step(): Long {
+    fun step(): Long {
         val now = SystemClock.elapsedRealtime()
         val gap = (now - lastTick).coerceAtLeast(0L)
         lastTick = now
@@ -100,10 +77,9 @@ class LimitsEngine(private val context: Context, private val listener: Component
             ?.let { AppLimits.groupOf(it)?.id }
             ?.takeIf { it in quotas }
         // A video in a Chrome Custom Tab belongs to the other app: not counted.
-        val playing = playingSessions().filter { (group, _) ->
+        val playingGroups = playingGroups().filter { group ->
             group in quotas && !(group == "chrome" && foregroundIsCustomTab)
-        }
-        val playingGroups = playing.map { it.first }.toSet()
+        }.toSet()
         for (group in setOfNotNull(shownGroup) + playingGroups) {
             // Playing at both rounds: the whole gap was listening, however
             // late this round came (the phone dozes with the screen off).
@@ -117,9 +93,9 @@ class LimitsEngine(private val context: Context, private val listener: Component
         playingBefore = playingGroups
 
         val blocked = shownGroup != null && AppLimits.isUsedUp(context, shownGroup)
-        if (blocked) block(shownGroup!!, playing) else hideOverlay()
-        playing.forEach { (group, controller) ->
-            if (AppLimits.isUsedUp(context, group)) pause(controller)
+        if (blocked) block(shownGroup!!) else hideOverlay()
+        playingGroups.forEach { group ->
+            if (AppLimits.isUsedUp(context, group)) pause(group)
         }
         return when {
             blocked -> TICK_BLOCKED_MILLIS // lift the cover as soon as home is up
@@ -130,7 +106,7 @@ class LimitsEngine(private val context: Context, private val listener: Component
 
     /** The app in front, from Usage access (resumed / paused activities). */
     @Suppress("DEPRECATION")
-    private fun readForeground() {
+    fun readForeground() {
         if (!hasUsageAccess(context)) {
             foregroundPkg = null
             return
@@ -157,6 +133,8 @@ class LimitsEngine(private val context: Context, private val listener: Component
                 }
                 UsageEvents.Event.MOVE_TO_BACKGROUND ->
                     if (e.packageName == foregroundPkg) foregroundPkg = null
+                FOREGROUND_SERVICE_START -> servicesRunning[e.packageName] = e.timeStamp
+                FOREGROUND_SERVICE_STOP -> servicesRunning.remove(e.packageName)
             }
         }
         // Replaying the last few seconds again is harmless: the latest event wins.
@@ -169,33 +147,36 @@ class LimitsEngine(private val context: Context, private val listener: Component
         return power?.isInteractive == true && keyguard?.isKeyguardLocked != true
     }
 
-    /** Limited apps playing in the background. */
-    private fun playingSessions(): List<Pair<String, MediaController>> {
-        val sessions = context.getSystemService(MediaSessionManager::class.java)
-            ?: return emptyList()
-        return try {
-            sessions.getActiveSessions(listener).mapNotNull { c ->
-                val group = AppLimits.groupOf(c.packageName)?.id
-                if (group != null && c.playbackState?.state == PlaybackState.STATE_PLAYING) {
-                    group to c
-                } else {
-                    null
-                }
-            }
-        } catch (e: SecurityException) {
-            emptyList()
-        }
+    private val audio get() = context.getSystemService(AudioManager::class.java)
+
+    /**
+     * Limited apps playing in the background: running a foreground service
+     * (a music app's player) while something is playing.
+     */
+    private fun playingGroups(): Set<String> {
+        if (audio?.isMusicActive != true) return emptySet()
+        return servicesRunning.keys.mapNotNull { AppLimits.groupOf(it)?.id }.toSet()
     }
 
-    private fun pause(controller: MediaController) {
-        Log.i(TAG, "${controller.packageName}: today's time is used up, pausing")
-        controller.transportControls.pause()
+    /**
+     * Pauses [group]'s playback with the media pause key — only when its
+     * player is the one that started last, so another app (a Quran recitation)
+     * is never paused by mistake.
+     */
+    private fun pause(group: String) {
+        if (audio?.isMusicActive != true) return
+        val latest = servicesRunning.maxByOrNull { it.value }?.key ?: return
+        if (AppLimits.groupOf(latest)?.id != group) return
+        Log.i(TAG, "$latest: today's time is used up, pausing")
+        val a = audio ?: return
+        a.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PAUSE))
+        a.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PAUSE))
     }
 
     /** Covers the app, pauses its playback and goes home. */
-    private fun block(group: String, playing: List<Pair<String, MediaController>>) {
+    private fun block(group: String) {
         if (overlay == null) Log.i(TAG, "$group: today's time is used up")
-        playing.forEach { (g, c) -> if (g == group) pause(c) }
+        pause(group)
         showOverlay()
         goHome()
     }
@@ -298,6 +279,10 @@ class LimitsEngine(private val context: Context, private val listener: Component
         private const val MAX_PLAYING_GAP_MILLIS = 15 * 60_000L
 
         private const val EVENT_OVERLAP_MILLIS = 5_000L
+
+        /** UsageEvents.Event.FOREGROUND_SERVICE_START / _STOP (Android 10+). */
+        private const val FOREGROUND_SERVICE_START = 19
+        private const val FOREGROUND_SERVICE_STOP = 20
 
         /** Usage access ("Apps with usage access") is granted. */
         fun hasUsageAccess(context: Context): Boolean {

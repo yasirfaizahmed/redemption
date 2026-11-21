@@ -23,11 +23,10 @@
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <!-- Optional, granted only over adb: lets Redemption switch its alarm guard
-         on just while an alarm rings, so payment apps aren't upset by it. -->
-    <uses-permission
-        android:name="android.permission.WRITE_SECURE_SETTINGS"
-        tools:ignore="ProtectedPermissions" />
+    <!-- The keeper: a foreground service that keeps the app limits, and keeps
+         the sums on screen while an alarm rings. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <application
         android:label="Redemption"
@@ -67,34 +66,25 @@
             android:exported="false"
             tools:replace="android:exported" />
 
-        <!-- Alarm guard (opt-in, Accessibility): while a wake-up alarm rings it
-             closes the power menu, uninstall dialog and Settings and swallows
-             the volume keys, until the sums are solved. -->
+        <!-- Keeps the daily app limits and, while a wake-up alarm rings, brings
+             the sums back if you leave them. No accessibility service and no
+             notification access: payment apps and Play Protect stay happy. -->
         <service
-            android:name=".AlarmGuardService"
+            android:name=".KeeperService"
             android:exported="false"
-            android:label="@string/alarm_guard_label"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/alarm_guard" />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Self-imposed daily app time limits and a wake-up alarm that keeps its puzzle on screen" />
         </service>
-
-        <!-- App limits: as "Notification access", Android keeps this running;
-             it keeps the daily limits (LimitsEngine), background playback
-             included. Reads no notifications. -->
-        <service
-            android:name=".MediaWatchService"
-            android:exported="false"
-            android:label="@string/media_watch_label"
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+        <receiver
+            android:name=".KeeperBootReceiver"
+            android:exported="false">
             <intent-filter>
-                <action android:name="android.service.notification.NotificationListenerService" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
-        </service>
+        </receiver>
 
         <!-- flutter_local_notifications: show scheduled reminders and restore them after reboot/update. -->
         <receiver

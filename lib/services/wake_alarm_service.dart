@@ -41,9 +41,8 @@ class AlarmChecks {
   const AlarmChecks({
     this.notifications,
     this.fullScreen,
-    this.guard,
-    this.guardAuto,
-    this.guardAlwaysOn,
+    this.usageAccess,
+    this.overlay,
     this.batteryUnrestricted,
   });
 
@@ -53,18 +52,15 @@ class AlarmChecks {
   /// The alarm may open over the lock screen.
   final bool? fullScreen;
 
-  /// The "Alarm guard" accessibility service is on: while an alarm rings it
-  /// closes the power menu, the uninstall dialog and Settings.
-  final bool? guard;
+  /// Usage access and display over other apps: while an alarm rings,
+  /// leaving the sums (another app, Settings, the uninstall screen) brings
+  /// them straight back.
+  final bool? usageAccess;
+  final bool? overlay;
 
-  /// Redemption may switch the guard on itself, just while an alarm rings
-  /// (granted once over adb) — so payment apps that refuse to work beside a
-  /// downloaded accessibility service (Google Pay) aren't affected.
-  final bool? guardAuto;
-
-  /// The guard is on with no alarm ringing (switched on by hand): payment
-  /// apps such as Google Pay refuse to work meanwhile.
-  final bool? guardAlwaysOn;
+  /// Both of the above (null: can't tell).
+  bool? get keepsSumsOnScreen =>
+      usageAccess == null || overlay == null ? null : usageAccess! && overlay!;
 
   /// Android won't put the app to sleep to save battery.
   final bool? batteryUnrestricted;
@@ -306,9 +302,8 @@ class PluginWakeAlarmService implements WakeAlarmService {
       return AlarmChecks(
         notifications: m['notifications'],
         fullScreen: m['fullScreen'],
-        guard: m['guard'],
-        guardAuto: m['guardAuto'],
-        guardAlwaysOn: m['guardAlwaysOn'],
+        usageAccess: m['usageAccess'],
+        overlay: m['overlay'],
         batteryUnrestricted: m['battery'],
       );
     } catch (e, s) {

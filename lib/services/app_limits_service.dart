@@ -37,7 +37,6 @@ class AppLimitsState {
   const AppLimitsState({
     this.quotas = const {},
     this.used = const {},
-    this.mediaAccess = false,
     this.usageAccess = false,
     this.overlay = false,
     this.autoTime,
@@ -49,10 +48,6 @@ class AppLimitsState {
   /// Time used today, per app id.
   final Map<String, Duration> used;
 
-  /// Notification access: keeps the limits running, background playback
-  /// included.
-  final bool mediaAccess;
-
   /// Usage access: which app is open.
   final bool usageAccess;
 
@@ -60,7 +55,7 @@ class AppLimitsState {
   final bool overlay;
 
   /// Everything the limits need (none of it upsets payment apps).
-  bool get ready => mediaAccess && usageAccess && overlay;
+  bool get ready => usageAccess && overlay;
 
   /// The phone sets its own date and time (null: unknown).
   final bool? autoTime;
@@ -111,7 +106,6 @@ class ChannelAppLimitsService implements AppLimitsService {
           for (final e in used.entries)
             '${e.key}': Duration(milliseconds: (e.value as num).toInt()),
         },
-        mediaAccess: m['mediaAccess'] == true,
         usageAccess: m['usageAccess'] == true,
         overlay: m['overlay'] == true,
         autoTime: m['autoTime'] as bool?,

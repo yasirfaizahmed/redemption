@@ -3,6 +3,23 @@
 Every release's notes come from its section below: CI copies the section into
 the GitHub release, and the app shows it under “What’s new” before updating.
 
+## 1.11.0
+
+- **Installs again, and Google Pay works.** Play Protect blocks installing an
+  app from a browser or file manager when it has an accessibility service or
+  notification access, and Google Pay refuses to pay beside a downloaded
+  accessibility service. Redemption now uses neither.
+- **The alarm still won't let you go:** while it rings, leaving for another
+  app, Settings or the uninstall screen brings the sums straight back (calls
+  and emergency always get through). The volume stays at maximum. Needs
+  *Usage access* and *Display over other apps* — see *Settings → Wake-up
+  alarm*. The power menu can no longer be blocked; if the phone is switched
+  off, the alarm rings again once it's back on.
+- **App limits keep working**, on *Usage access* and *Display over other
+  apps* only. Music or video that keeps playing in the background still
+  counts and is paused once its time is up. A small “Keeping your limits”
+  notification stays while limits are set.
+
 ## 1.10.0
 
 - **Google Pay works again.** Google Pay and some banking apps refuse

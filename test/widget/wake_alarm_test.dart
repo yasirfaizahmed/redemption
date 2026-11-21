@@ -84,7 +84,8 @@ class FakeWakeAlarms implements WakeAlarmService {
   Future<AlarmChecks> checks() async => const AlarmChecks(
     notifications: true,
     fullScreen: true,
-    guard: false,
+    usageAccess: true,
+    overlay: false,
     batteryUnrestricted: false,
   );
 
@@ -342,7 +343,7 @@ void main() {
     expect(saved!.alarmMathDifficulty, MathDifficulty.easy);
 
     await tester.dragUntilVisible(
-      find.text('Alarm guard'),
+      find.text('Keep the sums on screen'),
       find.byType(Scrollable).first,
       const Offset(0, -300),
     );
@@ -351,21 +352,20 @@ void main() {
     expect(
       find.descendant(
         of: find.ancestor(
-          of: find.text('Alarm guard'),
+          of: find.text('Keep the sums on screen'),
           matching: find.byType(ListTile),
         ),
         matching: find.text('Fix'),
       ),
       findsOneWidget,
     );
-    // How to keep Google Pay working: the guard only while ringing.
-    await tester.dragUntilVisible(
-      find.byTooltip('Copy the command'),
-      find.byType(Scrollable).first,
-      const Offset(0, -200),
+    expect(
+      find.textContaining('Allow Display over other apps'),
+      findsOneWidget,
     );
+    // No accessibility service: payments and Play Protect are fine.
     expect(find.textContaining('Google Pay'), findsWidgets);
-    expect(find.textContaining('WRITE_SECURE_SETTINGS'), findsOneWidget);
+    expect(find.textContaining('WRITE_SECURE_SETTINGS'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }
