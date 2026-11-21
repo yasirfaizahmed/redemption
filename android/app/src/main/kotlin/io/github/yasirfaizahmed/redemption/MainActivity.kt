@@ -27,6 +27,9 @@ class MainActivity : FlutterActivity() {
         super.onResume()
         resumed = true
         showOverLockScreenIfRinging()
+        // In front now, so Android lets the keeper start (it may have been
+        // refused while the sums showed up in the background).
+        KeeperService.start(this)
     }
 
     override fun onPause() {

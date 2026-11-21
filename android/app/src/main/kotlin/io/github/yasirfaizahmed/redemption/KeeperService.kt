@@ -62,7 +62,10 @@ class KeeperService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        startInForeground()
+        if (!startInForeground()) {
+            stopSelf()
+            return
+        }
         engine = LimitsEngine(this)
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_USER_PRESENT)
@@ -77,7 +80,10 @@ class KeeperService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startInForeground()
+        if (engine == null || !startInForeground()) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         runNow()
         return START_STICKY
     }
@@ -132,6 +138,7 @@ class KeeperService : Service() {
         engine.readForeground()
         // Only when we know where you went — never over the emergency dialer.
         val pkg = engine.foregroundPkg ?: return
+        if (engine.foregroundIsEmergency) return
         if (pkg == packageName || isCallOrEmergency(pkg)) return
         Log.i(TAG, "Left the alarm for $pkg while ringing: bringing it back")
         val intent = packageManager.getLaunchIntentForPackage(packageName) ?: return
@@ -158,7 +165,7 @@ class KeeperService : Service() {
         if (CALL_PACKAGES.any { pkg == it || pkg.startsWith("$it.") }) return true
         if (pkg.contains("dialer") || pkg.contains("incallui") ||
             pkg.contains("emergency") || pkg.contains("safetyhub") ||
-            pkg.contains("telecom")
+            pkg.contains("telecom") || pkg.contains("telephonyui")
         ) {
             return true
         }
@@ -169,7 +176,8 @@ class KeeperService : Service() {
         }
     }
 
-    private fun startInForeground() {
+    /** False when Android refuses (the app is in the background): try later. */
+    private fun startInForeground(): Boolean {
         val notifications = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             notifications?.createNotificationChannel(
@@ -199,10 +207,20 @@ class KeeperService : Service() {
             .setContentIntent(open)
             .setOngoing(true)
             .build()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "Not allowed to run in the foreground now", e)
+            false
         }
     }
 

@@ -51,7 +51,14 @@ class LimitsEngine(private val context: Context) {
         private set
     private var foregroundIsCustomTab = false
 
-    /** Apps running a foreground service, and since when (playing music…). */
+    /** The screen in front is an emergency dialer (whatever its package). */
+    var foregroundIsEmergency = false
+        private set
+
+    /**
+     * Players running as foreground services ("package/service class"), and
+     * since when. Downloads, uploads and syncs aren't players and are left out.
+     */
     private val servicesRunning = LinkedHashMap<String, Long>()
     private var playingBefore = emptySet<String>()
     private var overlay: View? = null
@@ -115,11 +122,14 @@ class LimitsEngine(private val context: Context) {
         val now = System.currentTimeMillis()
         // Never more than a day (first read) or an hour back: a long pause in
         // reading must not mean a huge read.
-        val from = if (firstRead) {
-            now - 24 * 60 * 60_000L
-        } else {
-            maxOf(eventsFrom, now - 60 * 60_000L)
+        // A gap longer than the hour read back (the phone slept): what ran then
+        // is unknown, so start over from a day back.
+        if (!firstRead && eventsFrom < now - 60 * 60_000L) {
+            servicesRunning.clear()
+            foregroundPkg = null
+            firstRead = true
         }
+        val from = if (firstRead) now - 24 * 60 * 60_000L else eventsFrom
         firstRead = false
         val events = usage.queryEvents(from, now) ?: return
         val e = UsageEvents.Event()
@@ -130,16 +140,30 @@ class LimitsEngine(private val context: Context) {
                     foregroundPkg = e.packageName
                     foregroundIsCustomTab =
                         e.className?.contains("customtabs", ignoreCase = true) == true
+                    foregroundIsEmergency =
+                        e.className?.contains("emergency", ignoreCase = true) == true
                 }
                 UsageEvents.Event.MOVE_TO_BACKGROUND ->
                     if (e.packageName == foregroundPkg) foregroundPkg = null
-                FOREGROUND_SERVICE_START -> servicesRunning[e.packageName] = e.timeStamp
-                FOREGROUND_SERVICE_STOP -> servicesRunning.remove(e.packageName)
+                FOREGROUND_SERVICE_START ->
+                    if (isPlayer(e)) servicesRunning[serviceKey(e)] = e.timeStamp
+                FOREGROUND_SERVICE_STOP -> servicesRunning.remove(serviceKey(e))
             }
         }
         // Replaying the last few seconds again is harmless: the latest event wins.
         eventsFrom = now - EVENT_OVERLAP_MILLIS
     }
+
+    private fun serviceKey(e: UsageEvents.Event) = "${e.packageName}/${e.className}"
+
+    /** Could be a player: not ours, not a download/upload/sync/backup. */
+    private fun isPlayer(e: UsageEvents.Event): Boolean {
+        if (e.packageName == context.packageName) return false
+        val cls = e.className?.lowercase() ?: return true
+        return NOT_PLAYERS.none { cls.contains(it) }
+    }
+
+    private fun groupOfService(key: String) = AppLimits.groupOf(key.substringBefore('/'))?.id
 
     private fun screenInUse(): Boolean {
         val power = context.getSystemService(PowerManager::class.java)
@@ -155,7 +179,7 @@ class LimitsEngine(private val context: Context) {
      */
     private fun playingGroups(): Set<String> {
         if (audio?.isMusicActive != true) return emptySet()
-        return servicesRunning.keys.mapNotNull { AppLimits.groupOf(it)?.id }.toSet()
+        return servicesRunning.keys.mapNotNull { groupOfService(it) }.toSet()
     }
 
     /**
@@ -166,7 +190,7 @@ class LimitsEngine(private val context: Context) {
     private fun pause(group: String) {
         if (audio?.isMusicActive != true) return
         val latest = servicesRunning.maxByOrNull { it.value }?.key ?: return
-        if (AppLimits.groupOf(latest)?.id != group) return
+        if (groupOfService(latest) != group) return
         Log.i(TAG, "$latest: today's time is used up, pausing")
         val a = audio ?: return
         a.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PAUSE))
@@ -279,6 +303,11 @@ class LimitsEngine(private val context: Context) {
         private const val MAX_PLAYING_GAP_MILLIS = 15 * 60_000L
 
         private const val EVENT_OVERLAP_MILLIS = 5_000L
+
+        /** Foreground services that aren't players. */
+        private val NOT_PLAYERS = listOf(
+            "download", "upload", "sync", "backup", "update", "install", "location",
+        )
 
         /** UsageEvents.Event.FOREGROUND_SERVICE_START / _STOP (Android 10+). */
         private const val FOREGROUND_SERVICE_START = 19
